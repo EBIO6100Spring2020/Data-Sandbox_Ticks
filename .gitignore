@@ -1,4 +1,5 @@
-
+# R projects to ignore
+*.RProj
 # Don't download license
 LICENCE
 
