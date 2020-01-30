@@ -11,5 +11,3 @@ stackByTable("./data_raw/filesToStack10092/") # merges zips into csv
 
 tickPathogen <- read.csv("./data_raw/filesToStack10092/stackedFiles/tck_pathogen.csv")
 head(tickPathogen)
-
-# This is melissa's version
