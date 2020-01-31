@@ -42,3 +42,6 @@ vignettes/*.pdf
 
 # R Environment Variables
 .Renviron
+.Rproj.user
+
+data_raw/filesToStack10093
