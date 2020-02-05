@@ -2,7 +2,6 @@
 ## Script to explore NEON Tick Pathogen data
 ## 30 Jan 2020
 ## WEM
-
 library(dplyr)
 library(tidyr)
 library(lubridate)
@@ -11,6 +10,12 @@ library(ggplot2)
 tickPathogen_raw <- read.csv("data_raw/filesToStack10092/stackedFiles/tck_pathogen.csv")
 colnames(tickPathogen_raw)
 
+##### about the data ######
+# each tick x pathogen test is a row, so the same tick is tested multiple times, for a different pathogen
+# tick individuals have a unique testingID
+# tick individuals are part of a subsample (all from the same subsampleID) 
+
+##### simplifying the data ########
 # remove unneeded columns
 tp <- tickPathogen_raw %>% select(subsampleID, domainID, siteID, plotID,
                                   nlcdClass, decimalLatitude,
@@ -75,11 +80,13 @@ tp_wide <- tp_wide %>% select(-`HardTick DNA Quality`)
 
 
 # aggregate by population
-tp_wide %>% group_by(siteID, Date, Taxonomy) %>% 
+tp_wide %>% group_by(siteID, plotID, Date, Taxonomy) %>% 
   summarise(Borrelia.Prev = sum(`Borrelia sp.`)/n(),
             nlcdClass = first(nlcdClass),
             elevation = first(elevation),
             Year = first(Year),
+            subsampleID = first(subsampleID),
+            subsampleID2 = last(subsampleID),
             Month = first(Month)) -> tp_agg
 
 #### visualize data ######
@@ -96,3 +103,7 @@ ggplot(data = tp_agg, aes(x=nlcdClass, y = Borrelia.Prev)) +
   geom_violin()
 ggplot(data = tp_agg, aes(x=siteID, y = Borrelia.Prev)) + 
   geom_violin()
+
+tp_agg <- data.frame(tp_agg)
+write.csv(tp_agg, "data_derived/Tick_Borrelia_Prev_Aggregated.csv", row.names = FALSE)
+write.csv(tp_wide, "data_derived/Tick_Pathogen_Individual.csv", row.names = FALSE)
