@@ -45,3 +45,5 @@ vignettes/*.pdf
 .Rproj.user
 
 data_raw/filesToStack10093
+data_raw/filesToStack10092
+data_derived/
