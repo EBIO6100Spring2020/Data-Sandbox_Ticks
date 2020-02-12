@@ -47,3 +47,6 @@ vignettes/*.pdf
 data_raw/filesToStack10093
 data_raw/filesToStack10092
 data_derived/
+
+# Don't download or upload anything containing MYC-- this is my working stuff
+*MYC.R
