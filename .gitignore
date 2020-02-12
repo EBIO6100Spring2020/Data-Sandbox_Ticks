@@ -50,3 +50,6 @@ data_derived/
 
 # Don't download or upload anything containing MYC-- this is my working stuff
 *MYC.R
+
+# Don't upload small mammal data
+data_raw/filesToStack10072
