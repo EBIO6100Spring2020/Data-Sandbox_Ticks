@@ -1,0 +1,41 @@
+SUMMARY INFORMATION 
+
+
+NUMBER OF DOMAINS: 
+19
+
+NUMBER OF SITES: 
+46
+
+NUMBER OF PLOTS: 
+292
+
+NUMBER OF SAMPLING DAYS: 
+765
+
+SAMPLING YEARS: 
+2014
+2015
+2016
+2017
+2018
+2019
+
+TYPES OF PLOTS:
+.
+distributed 
+       7644 
+
+TYPES OF ENVIRONMENTS:
+.
+           cultivatedCrops            deciduousForest                 dwarfScrub emergentHerbaceousWetlands 
+                       340                       2241                         31                         68 
+           evergreenForest        grasslandHerbaceous                mixedForest                 pastureHay 
+                      1155                       1494                        442                        324 
+           sedgeHerbaceous                 shrubScrub              woodyWetlands 
+                        28                        783                        738 
+
+RANGE IN SAMPLING METHODS:
+.
+         drag drag and flag          flag 
+         3210          4180           254 

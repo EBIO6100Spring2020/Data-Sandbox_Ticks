@@ -1,0 +1,32 @@
+SUMMARY FILE
+
+
+TEST RESULTS:
+
+         Negative Positive 
+   28196    44582     6178 
+
+SAMPLING CONDITION:
+
+   Handling error                OK Sample incomplete 
+                2             78953                 1 
+
+DIFFERENT TYPES OF PATHOGENS
+                                 
+                                       Negative Positive
+                                     1        0        0
+  Anaplasma phagocytophilum          0     5611       28
+  Babesia microti                 4754      868       17
+  Borrelia burgdorferi               0        9        0
+  Borrelia burgdorferi sensu lato 4754      701      184
+  Borrelia lonestari               885     4727       27
+  Borrelia mayonii                4754      873       12
+  Borrelia miyamotoi              4754      871       14
+  Borrelia sp.                       0     5416      223
+  Ehrlichia chaffeensis            885     4736       18
+  Ehrlichia ewingii                885     4739       15
+  Ehrlichia muris-like            4754      884        1
+  Francisella tularensis           885     4754        0
+  HardTick DNA Quality               0        0     5639
+  Ixodes pacificus                   0     5639        0
+  Rickettsia rickettsii            885     4754        0

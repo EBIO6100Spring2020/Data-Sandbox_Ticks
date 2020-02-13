@@ -1,0 +1,34 @@
+SUMMARY INFO
+
+
+SAMPLE CONDITIONS:
+.
+Damaged, analysis affected                         OK                      Other 
+                         1                       3585                          1 
+
+SEX AND AGE:
+.
+        Adult Female  Larva   Male  Nymph 
+     3      1    760    599    743   1481 
+
+FAMILY AND GENUS:
+          genus
+family          Amblyomma Dermacentor Haemaphysalis Ixodes
+            141         0           0             0      0
+  Ixodidae  510      1533         645            29    729
+
+GENUS AND SP
+               specificEpithet
+genus                affinis americanum andersoni angustus dentatus leporispalustris longicornis maculatum marxi muris
+                   3       0          0         0        0        0                0           0         0     0     0
+  Amblyomma        0       0       1462         0        0        0                0           0        37     0     0
+  Dermacentor      0       0          0         4        0        0                0           0         0     0     0
+  Haemaphysalis    0       0          0         0        0        0               11          18         0     0     0
+  Ixodes           0       5          0         0       24        1                0           0         0     2     6
+               specificEpithet
+genus           pacificus scapularis  sp. spp. variabilis
+                        0          0  648    0          0
+  Amblyomma             0          0   29    5          0
+  Dermacentor           0          0    0    0        641
+  Haemaphysalis         0          0    0    0          0
+  Ixodes               19        669    0    3          0
