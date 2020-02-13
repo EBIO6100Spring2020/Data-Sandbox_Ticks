@@ -376,12 +376,33 @@ for ( p in unique(tck_path_filt$testPathogenName)) {
     mutate(plotID=factor(plotID, levels=unique(plotID))) %>%
     filter(testPathogenName==p) %>%
     mutate(Year=year(as.Date(collectDate)), yDay = yday(as.Date(collectDate))) %>%
+    group_by(plotID, Year, yDay, testPathogenName) %>%
+    summarise(ProportionDetected = sum(testResult=="Positive")/length(testResult), TotalTests = length(testResult)) %>%
+    mutate(ProportionDetected = ifelse(ProportionDetected>0,ProportionDetected,NA)) %>%
+    ggplot() +
+    geom_point(aes(x=yDay, y=plotID, col=as.numeric(ProportionDetected), cex=log(TotalTests))) +
+    theme(axis.text.x = element_text(angle=90)) +
+    ylab("PlotID") + xlab("Day of year") +
+    scale_color_gradient(low="white",high="darkred")
+  dev.off()
+}
+
+
+dir.create("./output/EDA_plots/byPlot")
+for ( p in unique(tck_path_filt$plotID)) {
+  # p = unique(tck_path_filt$testPathogenName)[14]
+  pdf(paste0("./output/EDA_plots/byPlot/",p,".pdf"), width=12, height=8)
+  tck_path_filt %>%
+    filter(plotID==p) %>%
+    mutate(Year=year(as.Date(collectDate)), yDay = yday(as.Date(collectDate))) %>%
     ggplot() +
     geom_point(aes(x=yDay, y=plotID, col=testResult)) +
     theme(axis.text.x = element_text(angle=90)) +
     ylab("PlotID") + xlab("Day of year") +
     scale_color_manual(values = c("grey","red"))
   dev.off()
+  
+  View(tck_path_filt)
 }
 
 #### Merging taxonomy with tick field #### 
