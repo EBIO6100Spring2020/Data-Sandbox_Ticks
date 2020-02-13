@@ -370,7 +370,7 @@ dev.off()
 dir.create("./output/EDA_plots/byPathogen")
 for ( p in unique(tck_path_filt$testPathogenName)) {
   # p = unique(tck_path_filt$testPathogenName)[14]
-  pdf(paste0("./output/EDA_plots/byPathogen/",p,".pdf"), width=12, height=8)
+  ggsave(filename = paste0("./output/EDA_plots/byPathogen/",p,".pdf"), 
   tck_path_filt %>%
     arrange(domainID, siteID) %>%
     mutate(plotID=factor(plotID, levels=unique(plotID))) %>%
@@ -384,7 +384,7 @@ for ( p in unique(tck_path_filt$testPathogenName)) {
     theme(axis.text.x = element_text(angle=90)) +
     ylab("PlotID") + xlab("Day of year") +
     scale_color_gradient(low="white",high="darkred")
-  dev.off()
+  , width=12, height=8)
 }
 
 
@@ -395,11 +395,14 @@ for ( p in unique(tck_path_filt$plotID)) {
   tck_path_filt %>%
     filter(plotID==p) %>%
     mutate(Year=year(as.Date(collectDate)), yDay = yday(as.Date(collectDate))) %>%
+    group_by(plotID, Year, yDay, testPathogenName) %>%
+    summarise(ProportionDetected = sum(testResult=="Positive")/length(testResult), TotalTests = length(testResult)) %>%
+    # mutate(ProportionDetected = ifelse(ProportionDetected>0,ProportionDetected,NA)) %>%
     ggplot() +
-    geom_point(aes(x=yDay, y=plotID, col=testResult)) +
+    geom_point(aes(x=yDay, y=testPathogenName, col=ProportionDetected)) +
     theme(axis.text.x = element_text(angle=90)) +
-    ylab("PlotID") + xlab("Day of year") +
-    scale_color_manual(values = c("grey","red"))
+    ylab("PathogenName") + xlab("Day of year") +
+    scale_color_gradient(low="white",high="darkred")
   dev.off()
   
   View(tck_path_filt)
