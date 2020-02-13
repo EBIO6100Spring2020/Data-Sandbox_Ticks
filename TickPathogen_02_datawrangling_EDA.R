@@ -349,11 +349,12 @@ tck_path_filt <- tck_path %>%
 
 
 
+
 ###### Plotting data to visualize variables #######
 
 # Now, let's see distribution of pathogens across plots and years
 dir.create("./output/EDA_plots")
-pdf("./output/EDA_plots/pathogen_vs_plotID.pdf", width=12, height=8)
+ggsave(filename="./output/EDA_plots/pathogen_vs_plotID.pdf", width=12, height=8,
 tck_path_filt %>%
   arrange(domainID, siteID) %>%
   mutate(plotID=factor(plotID, levels=unique(plotID))) %>%
@@ -365,51 +366,113 @@ tck_path_filt %>%
   theme(axis.text.x = element_text(angle=90)) +
   ylab("Pathogen Name") +
   facet_wrap(.~Year, nrow=4)
-dev.off()
+)
 
 dir.create("./output/EDA_plots/byPathogen")
+# Get ordered plotID by domain and site
+plot_order <- tck_path_filt %>%
+  arrange(domainID, siteID) %>%
+  pull(plotID) %>%
+  unique()
 for ( p in unique(tck_path_filt$testPathogenName)) {
-  # p = unique(tck_path_filt$testPathogenName)[14]
-  ggsave(filename = paste0("./output/EDA_plots/byPathogen/",p,".pdf"), 
+  ggsave(filename = paste0("./output/EDA_plots/byPathogen/",p,".pdf"), width=12, height=8,
   tck_path_filt %>%
-    arrange(domainID, siteID) %>%
-    mutate(plotID=factor(plotID, levels=unique(plotID))) %>%
     filter(testPathogenName==p) %>%
     mutate(Year=year(as.Date(collectDate)), yDay = yday(as.Date(collectDate))) %>%
     group_by(plotID, Year, yDay, testPathogenName) %>%
     summarise(ProportionDetected = sum(testResult=="Positive")/length(testResult), TotalTests = length(testResult)) %>%
-    mutate(ProportionDetected = ifelse(ProportionDetected>0,ProportionDetected,NA)) %>%
+    ungroup() %>%
+    mutate(ProportionDetected = ifelse(ProportionDetected>0,as.numeric(ProportionDetected),NA)) %>%
+    mutate(ProportionDetected = as.numeric(ProportionDetected), plotID = factor(plotID, levels=plot_order)) %>%
     ggplot() +
-    geom_point(aes(x=yDay, y=plotID, col=as.numeric(ProportionDetected), cex=log(TotalTests))) +
+    geom_point(aes(x=yDay, y=plotID, col=(ProportionDetected), cex=log(TotalTests))) +
     theme(axis.text.x = element_text(angle=90)) +
     ylab("PlotID") + xlab("Day of year") +
-    scale_color_gradient(low="white",high="darkred")
-  , width=12, height=8)
+    scale_color_gradientn(limits = c(0,1),
+                         colours=c("white", "darkred"),
+                         breaks=c(0,1), labels=format(c(0,1)))+
+    xlim(c(0,365))+
+    scale_y_discrete(drop=FALSE)
+  )
 }
-
+# 
+# ggsave(filename="./output/EDA_plots/allPathogens_plotvsdate.pdf",
+#   tck_path_filt %>%
+#   arrange(domainID, siteID) %>%
+#   mutate(plotID=factor(plotID, levels=unique(plotID))) %>%
+#   # filter(testPathogenName==p) %>%
+#   mutate(Year=year(as.Date(collectDate)), yDay = yday(as.Date(collectDate))) %>%
+#   group_by(plotID, Year, yDay, testPathogenName) %>%
+#   summarise(ProportionDetected = sum(testResult=="Positive")/length(testResult), TotalTests = length(testResult)) %>%
+#     ungroup() %>%
+#     mutate(ProportionDetected = ifelse(ProportionDetected>0,as.numeric(ProportionDetected),NA)) %>%
+#     mutate(ProportionDetected = as.numeric(ProportionDetected), plotID = factor(plotID, levels=plot_order)) %>%
+#     ggplot() +
+#   geom_point(aes(x=yDay, y=plotID, col=as.numeric(ProportionDetected), cex=log(TotalTests))) +
+#   theme(axis.text.x = element_text(angle=90)) +
+#   ylab("PlotID") + xlab("Day of year") +
+#   scale_color_gradientn(limits = c(0,1),
+#                         colours=c("white", "darkred"),
+#                         breaks=c(0,1), labels=format(c(0,1)))+
+#   xlim(c(0,365)) +
+#   facet_grid(testPathogenName~.)
+#   , heigh=40, width=12
+# )
 
 dir.create("./output/EDA_plots/byPlot")
 for ( p in unique(tck_path_filt$plotID)) {
-  # p = unique(tck_path_filt$testPathogenName)[14]
-  pdf(paste0("./output/EDA_plots/byPlot/",p,".pdf"), width=12, height=8)
+  ggsave(filename=paste0("./output/EDA_plots/byPlot/",p,".pdf"), width=12, height=8,
   tck_path_filt %>%
     filter(plotID==p) %>%
     mutate(Year=year(as.Date(collectDate)), yDay = yday(as.Date(collectDate))) %>%
     group_by(plotID, Year, yDay, testPathogenName) %>%
     summarise(ProportionDetected = sum(testResult=="Positive")/length(testResult), TotalTests = length(testResult)) %>%
-    # mutate(ProportionDetected = ifelse(ProportionDetected>0,ProportionDetected,NA)) %>%
+    ungroup() %>%
+    mutate(ProportionDetected = ifelse(ProportionDetected>0,ProportionDetected,NA)) %>%
+    mutate(ProportionDetected = as.numeric(ProportionDetected), plotID = factor(plotID, levels=plot_order)) %>%
     ggplot() +
-    geom_point(aes(x=yDay, y=testPathogenName, col=ProportionDetected)) +
+    geom_point(aes(x=yDay, y=testPathogenName, col=ProportionDetected, cex=log(TotalTests))) +
     theme(axis.text.x = element_text(angle=90)) +
     ylab("PathogenName") + xlab("Day of year") +
-    scale_color_gradient(low="white",high="darkred")
-  dev.off()
-  
-  View(tck_path_filt)
+    scale_color_gradientn(limits = c(0,1),
+                          colours=c("white", "darkred"),
+                          breaks=c(0,1), labels=format(c(0,1)))+
+    xlim(c(0,365)) 
+)  
 }
+
+dir.create("./output/EDA_plots/byDomain_pathogenvsdate")
+for ( d in unique(tck_path_filt$domainID)) {
+  nplots <- tck_path_filt %>%
+    filter(domainID==d) %>%
+    pull(plotID) %>%unique() %>%length()
+  ggsave(filename=paste0("./output/EDA_plots/byDomain_pathogenvsdate/",d,".pdf"), width=12, height=nplots*2+1,
+         tck_path_filt %>%
+           filter(domainID==d) %>%
+           mutate(Year=year(as.Date(collectDate)), yDay = yday(as.Date(collectDate))) %>%
+           group_by(siteID, plotID, Year, yDay, testPathogenName) %>%
+           summarise(ProportionDetected = sum(testResult=="Positive")/length(testResult), TotalTests = length(testResult)) %>%
+           ungroup() %>%
+           mutate(ProportionDetected = ifelse(ProportionDetected>0,ProportionDetected,NA)) %>%
+           mutate(ProportionDetected = as.numeric(ProportionDetected), plotID = factor(plotID, levels=plot_order)) %>%
+           ggplot() +
+           geom_point(aes(x=yDay, y=testPathogenName, col=ProportionDetected, cex=log(TotalTests))) +
+           theme(axis.text.x = element_text(angle=90)) +
+           ylab("PathogenName") + xlab("Day of year") +
+           scale_color_gradientn(limits = c(0,1),
+                                 colours=c("white", "darkred"),
+                                 breaks=c(0,1), labels=format(c(0,1)))+
+           xlim(c(0,365)) +
+           facet_grid(siteID+ plotID ~ .)
+  )
+}
+
 
 #### Merging taxonomy with tick field #### 
 
+
+
+#### Merging with tick pathogens #####
 
 
 # 
