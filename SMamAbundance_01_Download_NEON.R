@@ -42,3 +42,7 @@ head(SMamTraps)
 names(SMamTraps)
 
 write.csv(SMamTraps, "data_derived/Small_Mammal_Trapping.csv", row.names=FALSE)
+
+#### TEST BETTER DOWNLOAD WAY ####
+test <- loadByProduct()
+?loadByProduct
