@@ -6,6 +6,11 @@ TEST RESULTS:
          Negative Positive 
    28196    44582     6178 
 
+TEST RESULTS:
+
+         Negative Positive 
+   28196    44582     6178 
+
 SAMPLING CONDITION:
 
    Handling error                OK Sample incomplete 

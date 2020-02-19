@@ -28,12 +28,14 @@ distributed
 
 TYPES OF ENVIRONMENTS:
 .
-           cultivatedCrops            deciduousForest                 dwarfScrub emergentHerbaceousWetlands 
-                       340                       2241                         31                         68 
-           evergreenForest        grasslandHerbaceous                mixedForest                 pastureHay 
-                      1155                       1494                        442                        324 
-           sedgeHerbaceous                 shrubScrub              woodyWetlands 
-                        28                        783                        738 
+           cultivatedCrops            deciduousForest                 dwarfScrub 
+                       340                       2241                         31 
+emergentHerbaceousWetlands            evergreenForest        grasslandHerbaceous 
+                        68                       1155                       1494 
+               mixedForest                 pastureHay            sedgeHerbaceous 
+                       442                        324                         28 
+                shrubScrub              woodyWetlands 
+                       783                        738 
 
 RANGE IN SAMPLING METHODS:
 .

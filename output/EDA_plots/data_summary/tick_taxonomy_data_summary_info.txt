@@ -19,16 +19,16 @@ family          Amblyomma Dermacentor Haemaphysalis Ixodes
 
 GENUS AND SP
                specificEpithet
-genus                affinis americanum andersoni angustus dentatus leporispalustris longicornis maculatum marxi muris
-                   3       0          0         0        0        0                0           0         0     0     0
-  Amblyomma        0       0       1462         0        0        0                0           0        37     0     0
-  Dermacentor      0       0          0         4        0        0                0           0         0     0     0
-  Haemaphysalis    0       0          0         0        0        0               11          18         0     0     0
-  Ixodes           0       5          0         0       24        1                0           0         0     2     6
+genus                affinis americanum andersoni angustus dentatus leporispalustris
+                   3       0          0         0        0        0                0
+  Amblyomma        0       0       1462         0        0        0                0
+  Dermacentor      0       0          0         4        0        0                0
+  Haemaphysalis    0       0          0         0        0        0               11
+  Ixodes           0       5          0         0       24        1                0
                specificEpithet
-genus           pacificus scapularis  sp. spp. variabilis
-                        0          0  648    0          0
-  Amblyomma             0          0   29    5          0
-  Dermacentor           0          0    0    0        641
-  Haemaphysalis         0          0    0    0          0
-  Ixodes               19        669    0    3          0
+genus           longicornis maculatum marxi muris pacificus scapularis  sp. spp. variabilis
+                          0         0     0     0         0          0  648    0          0
+  Amblyomma               0        37     0     0         0          0   29    5          0
+  Dermacentor             0         0     0     0         0          0    0    0        641
+  Haemaphysalis          18         0     0     0         0          0    0    0          0
+  Ixodes                  0         0     2     6        19        669    0    3          0

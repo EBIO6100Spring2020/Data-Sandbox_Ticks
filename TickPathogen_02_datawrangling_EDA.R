@@ -437,7 +437,7 @@ for ( p in unique(tck_path_filt$testPathogenName)) {
     theme(axis.text.x = element_text(angle=90)) +
     ylab("PlotID") + xlab("Day of year") +
     scale_color_gradientn(limits = c(0,1),
-                         colours=c("white", "darkred"),
+                         colours=c("white", "red"),
                          breaks=c(0,1), labels=format(c(0,1)))+
     xlim(c(0,365))+
     scale_y_discrete(drop=FALSE)
@@ -460,7 +460,7 @@ for ( p in unique(tck_path_filt$testPathogenName)) {
 #   theme(axis.text.x = element_text(angle=90)) +
 #   ylab("PlotID") + xlab("Day of year") +
 #   scale_color_gradientn(limits = c(0,1),
-#                         colours=c("white", "darkred"),
+#                         colours=c("white", "red"),
 #                         breaks=c(0,1), labels=format(c(0,1)))+
 #   xlim(c(0,365)) +
 #   facet_grid(testPathogenName~.)
@@ -483,7 +483,7 @@ for ( p in unique(tck_path_filt$plotID)) {
     theme(axis.text.x = element_text(angle=90)) +
     ylab("PathogenName") + xlab("Day of year") +
     scale_color_gradientn(limits = c(0,1),
-                          colours=c("white", "darkred"),
+                          colours=c("white", "red"),
                           breaks=c(0,1), labels=format(c(0,1)))+
     xlim(c(0,365)) 
 )  
@@ -508,7 +508,7 @@ for ( d in unique(tck_path_filt$domainID)) {
            theme(axis.text.x = element_text(angle=90)) +
            ylab("PathogenName") + xlab("Day of year") +
            scale_color_gradientn(limits = c(0,1),
-                                 colours=c("white", "darkred"),
+                                 colours=c("white", "red"),
                                  breaks=c(0,1), labels=format(c(0,1)))+
            xlim(c(0,365)) +
            facet_grid(siteID+ plotID ~ .)
@@ -516,40 +516,160 @@ for ( d in unique(tck_path_filt$domainID)) {
 }
 
 
-#### Merging taxonomy with tick field #### 
+#### Plotting tick data to visualize variables #####
+
+# Problem with dataset right now is that adult counts, nymph counts, and larva counts are not individual lines.
+# Need to put into long format, then remove zeros, and "uncount". Add zeros back in manually.
+tck_field_templong <- tck_field_filt %>%
+  gather(adultCount, nymphCount, larvaCount, key=lifeStage, value=count) 
+# Get only zeros
+tck_field_long_zero <- tck_field_templong %>%
+  filter(count==0 | is.na(count))
+# Merge with uncounted
+tck_field_long <- tck_field_templong %>%
+  filter(count>0) %>% # removes NAs too
+  uncount(count) %>%
+  mutate(count=1) %>%
+  full_join(tck_field_long_zero) 
+
+# First, plot tick abundance by time; separate out into regions. standardize by area dragged. Color by tick life stage. 
+# Note that we should use bayesian methods to estimate tick abundance, since a smaller area sampled = less certain; also, less ticks = less certain. Maybe fit a poisson.
+dir.create("./output/EDA_plots/tick_field")
+dir.create("./output/EDA_plots/tick_field/bySite")
+
+# create a tck_field_short with proper dates
+tck_field_short <- tck_field_filt %>%
+  select(domainID, siteID, plotID, collectDate, totalSampledArea, adultCount, nymphCount, larvaCount, samplingMethod) %>%
+  mutate(Year=year(as.Date(collectDate)), Day_of_year=yday(as.Date(collectDate))) %>%
+  mutate(adultCountPerArea = adultCount/totalSampledArea, nymphCountPerArea = nymphCount/totalSampledArea, larvaCountPerArea = larvaCount/totalSampledArea) %>%
+  gather(adultCountPerArea, nymphCountPerArea, larvaCountPerArea, key=LifeStage, value=Count) %>%
+  mutate(LifeStage=factor(LifeStage, levels=c("larvaCountPerArea","nymphCountPerArea","adultCountPerArea")))
+
+for ( d in unique(tck_field_filt$domainID)) {
+  newSites <- tck_field_filt %>%
+    filter(domainID==d) %>%
+    pull(siteID) %>%
+    unique()
+  for ( s in newSites) {
+    # get the size of plot
+    tck_field_temp  <- tck_field_short %>%
+      filter(domainID==d, siteID==s) 
+    n_col <- tck_field_temp %>%
+      pull(plotID) %>%
+      unique() %>%
+      length()
+    n_row <- tck_field_temp %>%
+      pull(Year) %>%
+      unique() %>%
+      length()
+    ggsave(paste0("./output/EDA_plots/tick_field/bySite/",d,"_",s,".pdf"), height=0.75*n_row, width=1.5*n_col+2
+           , tck_field_temp %>%
+             ggplot() +
+             geom_line(aes(x=Day_of_year, y=Count, col=LifeStage, lty=LifeStage))+
+             scale_color_manual(values=c("green","purple","red")) +
+             theme(axis.text.x = element_text(angle=90)) +
+             ylim(0, NA)+
+             facet_grid(Year ~ plotID)
+           )
+  }
+}
 
 
+### Average tick counts some how? To see seasonality?
+# get pathogen first
+tck_path_summary_byday <- tck_path_filt %>%
+  mutate(Year=year(as.Date(collectDate)), Day_of_year=yday(as.Date(collectDate))) %>%
+  group_by(Day_of_year) %>%
+  summarize(allPos = sum(testResult=="Positive"), allNeg = sum(testResult=="Negative")) %>%
+  mutate(Prevalence=allPos/(allPos+allNeg))
+tck_path_summary_bydaydomain <- tck_path_filt %>%
+  mutate(Year=year(as.Date(collectDate)), Day_of_year=yday(as.Date(collectDate))) %>%
+  group_by(Day_of_year, domainID) %>%
+  summarize(allPos = sum(testResult=="Positive"), allNeg = sum(testResult=="Negative")) %>%
+  mutate(Prevalence=allPos/(allPos+allNeg))
+tck_path_summary_bydayYear <- tck_path_filt %>%
+  mutate(Year=year(as.Date(collectDate)), Day_of_year=yday(as.Date(collectDate))) %>%
+  group_by(Day_of_year, Year) %>%
+  summarize(allPos = sum(testResult=="Positive"), allNeg = sum(testResult=="Negative")) %>%
+  mutate(Prevalence=allPos/(allPos+allNeg))
 
-#### Merging with tick pathogens #####
+tck_path_summary_bydayYearDomain <- tck_path_filt %>%
+  mutate(Year=year(as.Date(collectDate)), Day_of_year=yday(as.Date(collectDate))) %>%
+  group_by(Day_of_year, Year, domainID) %>%
+  summarize(allPos = sum(testResult=="Positive"), allNeg = sum(testResult=="Negative")) %>%
+  mutate(Prevalence=allPos/(allPos+allNeg))
+
+dir.create("./output/EDA_plots/tick_field/lifestage_phenology")
+ggsave("./output/EDA_plots/tick_field/lifestage_phenology/allSamples.pdf", width=10, height=5
+       , tck_field_short %>%
+         group_by(Day_of_year, LifeStage) %>%
+         summarize(totalCounts = sum(Count, na.rm = TRUE)) %>%
+         ggplot() +
+         geom_bar(aes(x=Day_of_year, y=log(totalCounts+1), col=LifeStage, fill=LifeStage), stat="identity", position=position_dodge2(pad=0.5))+
+         geom_point(data=tck_path_summary_byday, aes(x=Day_of_year, y=Prevalence*20), col="black", cex=1, col="black", cex=1, alpha=0.25)+
+         scale_color_manual(values=c("green","purple","red")) +
+         scale_fill_manual(values=c("green","purple","red")) +
+         scale_y_continuous(name = "log Tick Count",
+                            sec.axis = sec_axis(~./20, name = "% Tested positive for any pathogen", 
+                                                labels = function(b) { paste0(round(b * 100, 0), "%")})) +
+         theme(
+           axis.title.y.right = element_text(color = "black"))
+       
+       )
+# Note to self: plot pathogen data on top of this (Borrelia only??)
 
 
-# 
-# 
-# # Combined plot of domain:site:plot
-# for ( d in unique(tck_field$domainID)) {
-#     d=unique(tck_field$domainID)[1]
-#     temp <- tck_field %>%
-#       as_tibble() %>%
-#       filter(domainID==d)
-#     for ( s in unique(temp$siteID)) {
-#       s= unique(temp$siteID)[2]
-#       temp2 <- temp %>%
-#         filter(siteID==s)
-#       for ( p in unique(temp$plotID)) {
-#         temp2 %>%
-#           filter(plotID==p) %>%
-#           mutate(Date=as.Date(collectDate)) %>%
-#           mutate(Year=year(Date), Month=month(Date), Day=yday(Date)) %>%
-#           # mutate(siteID=as.character(siteID)) %>%
-#           select(Date, Year, Month, Day, adultCount, nymphCount, larvaCount) %>%
-#           gather(adultCount, nymphCount, larvaCount, key=lifestage, value=count) %>%
-#           complete() %>%
-#           as_tibble() %>%
-#           ggplot() +
-#           geom_point(aes(x=lifestage, y=count, col=factor(Year)))
-#         # facet_grid(.~ siteID)
-#       }
-#     }
-# }
+# Separate by Domain to see if phenology changes by domain
+ggsave("./output/EDA_plots/tick_field/lifestage_phenology/allSamples_sepbyDomain.pdf", width=5, height=20
 
+  , tck_field_short %>%
+    group_by(domainID, Day_of_year, LifeStage) %>%
+    summarize(totalCounts = sum(Count, na.rm = TRUE)) %>%
+    ggplot() +
+    geom_bar(aes(x=Day_of_year, y=log(totalCounts+1), col=LifeStage, fill=LifeStage), stat="identity", position=position_dodge2(pad=0.5))+
+    geom_point(data=tck_path_summary_bydaydomain, aes(x=Day_of_year, y=Prevalence*20), col="black", cex=0.5, alpha=0.25)+
+    scale_color_manual(values=c("green","purple","red")) +
+    scale_fill_manual(values=c("green","purple","red")) +
+    scale_y_continuous(name = "log Tick Count",
+                       sec.axis = sec_axis(~./20, name = "% Tested positive for any pathogen", 
+                                           labels = function(b) { paste0(round(b * 100, 0), "%")})) +
+    theme(
+      axis.title.y.right = element_text(color = "black")) +
+    facet_wrap(.~domainID, ncol=1)
+)
+
+
+ggsave("./output/EDA_plots/tick_field/lifestage_phenology/allSamples_sepbyYear.pdf", width=8, height=10
+       , tck_field_short %>%
+  group_by(Year, Day_of_year, LifeStage) %>%
+  summarize(totalCounts = sum(Count, na.rm = TRUE)) %>%
+  ggplot() +
+  geom_bar(aes(x=Day_of_year, y=log(totalCounts+1), col=LifeStage, fill=LifeStage), stat="identity", position=position_dodge2(pad=0.5))+
+  geom_point(data=tck_path_summary_bydayYear, aes(x=Day_of_year, y=Prevalence*20), col="black", cex=0.5, alpha=0.25)+
+  scale_color_manual(values=c("green","purple","red")) +
+  scale_fill_manual(values=c("green","purple","red")) +
+  scale_y_continuous(name = "log Tick Count",
+                     sec.axis = sec_axis(~./20, name = "% Tested positive for any pathogen", 
+                                         labels = function(b) { paste0(round(b * 100, 0), "%")})) +
+  theme(
+    axis.title.y.right = element_text(color = "black")) +
+  facet_wrap(.~Year, ncol=1)
+)
+
+ggsave("./output/EDA_plots/tick_field/lifestage_phenology/allSamples_yearvsdomain.pdf", width=15, height=7
+       , tck_field_short %>%
+         group_by(Year, Day_of_year, LifeStage) %>%
+         summarize(totalCounts = sum(Count, na.rm = TRUE)) %>%
+         ggplot() +
+         geom_bar(aes(x=Day_of_year, y=log(totalCounts+1), col=LifeStage, fill=LifeStage), stat="identity", position=position_dodge2(pad=0.5))+
+         geom_point(data=tck_path_summary_bydayYearDomain, aes(x=Day_of_year, y=Prevalence*20), col="black", cex=0.5, alpha=1)+
+         scale_color_manual(values=c("green","purple","red")) +
+         scale_fill_manual(values=c("green","purple","red")) +
+         scale_y_continuous(name = "log Tick Count",
+                            sec.axis = sec_axis(~./20, name = "% Tested positive for any pathogen", 
+                                                labels = function(b) { paste0(round(b * 100, 0), "%")})) +
+         theme(
+           axis.title.y.right = element_text(color = "black")) +
+         facet_grid(Year~domainID)
+)
 
