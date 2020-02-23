@@ -127,7 +127,6 @@ tck_field %>%
   filter(larvaCount>500) %>%
   nrow()
 # Not sure why they did this-- but I'm going to leave it at 500 for now and hope that they didn't discard TOO many.
-# Final verdict: keep all samples.
 
 ## What is event ID?
 tck_field %>%
@@ -397,124 +396,6 @@ tck_path_filt <- tck_path %>%
          , batchID, testedBy # random effects
          ) 
 
-###### Plotting pathogen data to visualize variables #######
-
-# Now, let's see distribution of pathogens across plots and years
-dir.create("./output/EDA_plots/tick_pathogen")
-
-ggsave(filename="./output/EDA_plots/tick_pathogen/pathogen_vs_plotID.pdf", width=12, height=8,
-tck_path_filt %>%
-  arrange(domainID, siteID) %>%
-  mutate(plotID=factor(plotID, levels=unique(plotID))) %>%
-  mutate(Year=year(as.Date(collectDate))) %>%
-  group_by(plotID, Year, testPathogenName) %>%
-  summarise(ProportionDetected = sum(testResult=="Positive")/length(testResult), TotalTests = length(testResult)) %>%
-  ggplot() +
-  geom_point(aes(x=plotID, y=testPathogenName, col=ProportionDetected, cex=log(TotalTests))) +
-  theme(axis.text.x = element_text(angle=90)) +
-  ylab("Pathogen Name") +
-  facet_wrap(.~Year, nrow=4)
-)
-
-dir.create("./output/EDA_plots/tick_pathogen/byPathogen")
-# Get ordered plotID by domain and site
-plot_order <- tck_path_filt %>%
-  arrange(domainID, siteID) %>%
-  pull(plotID) %>%
-  unique()
-for ( p in unique(tck_path_filt$testPathogenName)) {
-  ggsave(filename = paste0("./output/EDA_plots/tick_pathogen/byPathogen/",p,".pdf"), width=12, height=8,
-  tck_path_filt %>%
-    filter(testPathogenName==p) %>%
-    mutate(Year=year(as.Date(collectDate)), yDay = yday(as.Date(collectDate))) %>%
-    group_by(plotID, Year, yDay, testPathogenName) %>%
-    summarise(ProportionDetected = sum(testResult=="Positive")/length(testResult), TotalTests = length(testResult)) %>%
-    ungroup() %>%
-    mutate(ProportionDetected = ifelse(ProportionDetected>0,as.numeric(ProportionDetected),NA)) %>%
-    mutate(ProportionDetected = as.numeric(ProportionDetected), plotID = factor(plotID, levels=plot_order)) %>%
-    ggplot() +
-    geom_point(aes(x=yDay, y=plotID, col=(ProportionDetected), cex=log(TotalTests))) +
-    theme(axis.text.x = element_text(angle=90)) +
-    ylab("PlotID") + xlab("Day of year") +
-    scale_color_gradientn(limits = c(0,1),
-                         colours=c("white", "red"),
-                         breaks=c(0,1), labels=format(c(0,1)))+
-    xlim(c(0,365))+
-    scale_y_discrete(drop=FALSE)
-  )
-}
-# 
-# ggsave(filename="./output/EDA_plots/allPathogens_plotvsdate.pdf",
-#   tck_path_filt %>%
-#   arrange(domainID, siteID) %>%
-#   mutate(plotID=factor(plotID, levels=unique(plotID))) %>%
-#   # filter(testPathogenName==p) %>%
-#   mutate(Year=year(as.Date(collectDate)), yDay = yday(as.Date(collectDate))) %>%
-#   group_by(plotID, Year, yDay, testPathogenName) %>%
-#   summarise(ProportionDetected = sum(testResult=="Positive")/length(testResult), TotalTests = length(testResult)) %>%
-#     ungroup() %>%
-#     mutate(ProportionDetected = ifelse(ProportionDetected>0,as.numeric(ProportionDetected),NA)) %>%
-#     mutate(ProportionDetected = as.numeric(ProportionDetected), plotID = factor(plotID, levels=plot_order)) %>%
-#     ggplot() +
-#   geom_point(aes(x=yDay, y=plotID, col=as.numeric(ProportionDetected), cex=log(TotalTests))) +
-#   theme(axis.text.x = element_text(angle=90)) +
-#   ylab("PlotID") + xlab("Day of year") +
-#   scale_color_gradientn(limits = c(0,1),
-#                         colours=c("white", "red"),
-#                         breaks=c(0,1), labels=format(c(0,1)))+
-#   xlim(c(0,365)) +
-#   facet_grid(testPathogenName~.)
-#   , heigh=40, width=12
-# )
-
-dir.create("./output/EDA_plots/tick_pathogen/byPlot")
-for ( p in unique(tck_path_filt$plotID)) {
-  ggsave(filename=paste0("./output/EDA_plots/tick_pathogen/byPlot/",p,".pdf"), width=12, height=8,
-  tck_path_filt %>%
-    filter(plotID==p) %>%
-    mutate(Year=year(as.Date(collectDate)), yDay = yday(as.Date(collectDate))) %>%
-    group_by(plotID, Year, yDay, testPathogenName) %>%
-    summarise(ProportionDetected = sum(testResult=="Positive")/length(testResult), TotalTests = length(testResult)) %>%
-    ungroup() %>%
-    mutate(ProportionDetected = ifelse(ProportionDetected>0,ProportionDetected,NA)) %>%
-    mutate(ProportionDetected = as.numeric(ProportionDetected), plotID = factor(plotID, levels=plot_order)) %>%
-    ggplot() +
-    geom_point(aes(x=yDay, y=testPathogenName, col=ProportionDetected, cex=log(TotalTests))) +
-    theme(axis.text.x = element_text(angle=90)) +
-    ylab("PathogenName") + xlab("Day of year") +
-    scale_color_gradientn(limits = c(0,1),
-                          colours=c("white", "red"),
-                          breaks=c(0,1), labels=format(c(0,1)))+
-    xlim(c(0,365)) 
-)  
-}
-
-dir.create("./output/EDA_plots/tick_pathogen/byDomain_pathogenvsdate")
-for ( d in unique(tck_path_filt$domainID)) {
-  nplots <- tck_path_filt %>%
-    filter(domainID==d) %>%
-    pull(plotID) %>%unique() %>%length()
-  ggsave(filename=paste0("./output/EDA_plots/tick_pathogen/byDomain_pathogenvsdate/",d,".pdf"), width=12, height=nplots*2+1,
-         tck_path_filt %>%
-           filter(domainID==d) %>%
-           mutate(Year=year(as.Date(collectDate)), yDay = yday(as.Date(collectDate))) %>%
-           group_by(siteID, plotID, Year, yDay, testPathogenName) %>%
-           summarise(ProportionDetected = sum(testResult=="Positive")/length(testResult), TotalTests = length(testResult)) %>%
-           ungroup() %>%
-           mutate(ProportionDetected = ifelse(ProportionDetected>0,ProportionDetected,NA)) %>%
-           mutate(ProportionDetected = as.numeric(ProportionDetected), plotID = factor(plotID, levels=plot_order)) %>%
-           ggplot() +
-           geom_point(aes(x=yDay, y=testPathogenName, col=ProportionDetected, cex=log(TotalTests))) +
-           theme(axis.text.x = element_text(angle=90)) +
-           ylab("PathogenName") + xlab("Day of year") +
-           scale_color_gradientn(limits = c(0,1),
-                                 colours=c("white", "red"),
-                                 breaks=c(0,1), labels=format(c(0,1)))+
-           xlim(c(0,365)) +
-           facet_grid(siteID+ plotID ~ .)
-  )
-}
-
 
 #### Plotting tick data to visualize variables #####
 
@@ -616,8 +497,6 @@ ggsave("./output/EDA_plots/tick_field/lifestage_phenology/allSamples.pdf", width
            axis.title.y.right = element_text(color = "black"))
        
        )
-# Note to self: plot pathogen data on top of this (Borrelia only??)
-
 
 # Separate by Domain to see if phenology changes by domain
 ggsave("./output/EDA_plots/tick_field/lifestage_phenology/allSamples_sepbyDomain.pdf", width=5, height=20
@@ -672,4 +551,332 @@ ggsave("./output/EDA_plots/tick_field/lifestage_phenology/allSamples_yearvsdomai
            axis.title.y.right = element_text(color = "black")) +
          facet_grid(Year~domainID)
 )
+
+View(tck_field_short)
+#### Notes and observations #####
+## There is no data for ticks in 2019?
+tck_field_short %>%
+  filter(Year==2019) %>%
+  mutate(present=Count>0) %>%
+  pull(present) %>%
+  any(na.rm = TRUE)
+# Nope; most of them are NAs and there are also some zeros. We should just get rid of this all together.
+
+## Also, no tick pathogen data in years beyond 2017?
+tck_path_filt %>%
+  mutate(Year=year(as.Date(collectDate))) %>%
+  select(Year) %>%
+  unique()
+# True; there is no pathogen data for 2018, 2019.
+
+## Finally, check the tick species count data to see if it stops in 2018 as well.
+tck_tax_filt %>%
+  mutate(Year=year(as.Date(collectDate))) %>%
+  select(Year) %>%
+  unique()
+tck_tax_filt %>%
+  mutate(Year=year(as.Date(collectDate))) %>%
+  filter(Year==2018)
+# Okay, good. It also stops at 2018.
+
+###### Plotting tck taxonomy #######
+
+# Checking to see if sampleIDs or subsampleIDs are duplicated in tck_tax/field
+tck_tax_filt %>%
+  pull(subsampleID) %>%
+  duplicated() %>%
+  any()
+tck_field_filt %>%
+  pull(sampleID) %>%
+  duplicated() %>%
+  any()
+# !!! Which ones are duplicated, and why?
+duplicated_sampleIDs <- tck_field_filt[tck_field_filt %>%
+                                         pull(sampleID) %>%
+                                         duplicated(), "sampleID"]
+
+View(tck_field_filt[tck_field_filt$sampleID %in% duplicated_sampleIDs,])
+View(tck_field[tck_field_filt$sampleID %in% duplicated_sampleIDs,])
+
+# The duplicated sampleIDs are literally minutes/hours apart in some cases; it was probably because
+# they didn't get any ticks in the first drag, so they did a second drag.
+# This means we should combine these sampleIDs.
+
+# Do tck taxonomy counts corroborate tck_field counts?
+# Okay, make a tck_tax that has JUST counts
+MATCHEDCOUNTS_tckfield_tcktax <- tck_tax %>%
+  select(sampleID, sexOrAge, individualCount, acceptedTaxonID) %>%
+  # spread(key=ageOrSex, value=individualCount)
+  group_by(sampleID, sexOrAge) %>% # make male and female adults the same line
+  summarize(allCounts=sum(individualCount)) %>%
+  spread(key=sexOrAge, value=allCounts) %>%
+  mutate(adultCount_tax=sum(c(Adult, Female, Male), na.rm = TRUE), nymphCount_tax = Nymph, larvaCount_tax = Larva) %>%
+  select(sampleID, adultCount_tax, Female, Male, nymphCount_tax, larvaCount_tax)%>%
+  right_join(tck_field) %>%
+  mutate(totalCount_nolarva_tax=sum(c(adultCount_tax, nymphCount_tax), na.rm = TRUE)
+         , totalCount_nolarva = sum(c(adultCount, nymphCount), na.rm=TRUE)) %>%
+  select(sampleID, totalCount_nolarva, totalCount_nolarva_tax, adultCount, adultCount_tax, Female, Male, nymphCount, nymphCount_tax, larvaCount, larvaCount_tax, remarks) %>%
+  replace(is.na(.), 0) 
+
+# How many ARE the same?
+nrow(MATCHEDCOUNTS_tckfield_tcktax)
+# Originally 6118 samples
+length(unique(MATCHEDCOUNTS_tckfield_tcktax$sampleID))
+
+MATCHEDCOUNTS_tckfield_tcktax %>%
+  filter(adultCount == adultCount_tax, nymphCount == nymphCount_tax, larvaCount==larvaCount_tax) %>%
+  pull(sampleID) %>%
+  length()
+# 5041 are perfectly matched in ALL categories.
+MATCHEDCOUNTS_tckfield_tcktax %>%
+  filter(adultCount != adultCount_tax | nymphCount != nymphCount_tax | larvaCount!=larvaCount_tax) %>%
+  pull(sampleID) %>%
+  length()
+# 1077 of them have some kind of mismatch
+MATCHEDCOUNTS_tckfield_tcktax %>%
+  filter(adultCount == adultCount_tax & nymphCount == nymphCount_tax & larvaCount!=larvaCount_tax) %>%
+  pull(sampleID) %>%
+  length()
+# 457 of those are because ONLY the larva counts are wrong. This means we should trust tck_field, since they might not have IDd larva
+MATCHEDCOUNTS_tckfield_tcktax %>%
+  filter(adultCount != adultCount_tax | nymphCount != nymphCount_tax) %>%
+  pull(sampleID) %>%
+  length()
+# and 620 are mismatched adults and nymphs, regardless of whether or not larva counts are wrong.
+MATCHEDCOUNTS_tckfield_tcktax %>%
+  filter(adultCount != adultCount_tax | nymphCount != nymphCount_tax) %>%
+  filter(totalCount_nolarva_tax==0) %>%
+  pull(sampleID) %>%
+  length()
+# Of those 620 mismatches, 197 of them are because there's no taxonomy data at all.
+notax_samples <- MATCHEDCOUNTS_tckfield_tcktax %>%
+  filter(adultCount != adultCount_tax | nymphCount != nymphCount_tax) %>%
+  filter(totalCount_nolarva_tax==0) %>%
+  arrange(sampleID) %>%
+  pull(sampleID)
+tck_field_5 %>%
+  filter(sampleID%in% notax_samples) %>%
+  select(year, month) %>%
+  table()
+tck_field_5 %>%
+  filter(sampleID%in% notax_samples) %>%
+  select(year, siteID) %>%
+  table()
+# This is also random; it's not nay particular year, month, or location 
+MATCHEDCOUNTS_tckfield_tcktax %>%
+  filter(adultCount != adultCount_tax | nymphCount != nymphCount_tax) %>%
+  filter(totalCount_nolarva_tax==0) %>%
+  mutate(totalCount = totalCount_nolarva+larvaCount) %>%
+  ggplot() + geom_histogram(aes(x=totalCount_nolarva))
+# Lastly, there's no seeming bias toward what the count was within the sample. Aka, it's not because they were lazy and didn't want to count the big samples.
+MATCHEDCOUNTS_tckfield_tcktax %>%
+  filter(adultCount != adultCount_tax | nymphCount != nymphCount_tax) %>%
+  filter(totalCount_nolarva_tax!=0) %>%
+  pull(sampleID) %>%
+  length()
+# So, there are 423 left to sift through.
+# How many have the correct number of tick counts, but got shuffled between tick IDs?
+MATCHEDCOUNTS_tckfield_tcktax %>%
+  filter(adultCount != adultCount_tax | nymphCount != nymphCount_tax) %>%
+  filter(totalCount_nolarva_tax!=0) %>%
+  mutate(totalCount = adultCount + nymphCount + larvaCount, totalCount_tax = adultCount_tax+ nymphCount_tax + larvaCount_tax) %>%
+  filter(totalCount == totalCount_tax) %>%
+  pull(sampleID) %>%length()
+# 82 of them have the correct number of ticks.
+
+
+# Side note: check if it is switching adults and nymphs; maybe males look like nymphs
+MATCHEDCOUNTS_tckfield_tcktax %>%
+  filter(adultCount != adultCount_tax | nymphCount != nymphCount_tax) %>%
+  filter(totalCount_nolarva_tax!=0) %>%
+  mutate(diff_A = adultCount-adultCount_tax, diff_N = nymphCount-nymphCount_tax, diff_L = larvaCount-larvaCount_tax, diff_total=totalCount_nolarva-totalCount_nolarva_tax) %>%
+  mutate(COMP_AN = diff_A + diff_N) %>%
+  filter(COMP_AN==0, diff_L==0) %>%
+  pull(sampleID) %>% length()
+# 59 of them are because an adult and nymph got switched up, only
+MATCHEDCOUNTS_tckfield_tcktax %>%
+  filter(adultCount != adultCount_tax | nymphCount != nymphCount_tax) %>%
+  filter(totalCount_nolarva_tax!=0) %>%
+  mutate(diff_A = adultCount-adultCount_tax, diff_N = nymphCount-nymphCount_tax, diff_L = larvaCount-larvaCount_tax, diff_total=totalCount_nolarva-totalCount_nolarva_tax) %>%
+  mutate(COMP_NL= diff_N+diff_L) %>%
+  filter(COMP_NL==0, diff_A==0) %>%
+  pull(sampleID) %>% length()
+# 21 are because a nymph got mistook as a larva
+MATCHEDCOUNTS_tckfield_tcktax %>%
+  filter(adultCount != adultCount_tax | nymphCount != nymphCount_tax) %>%
+  filter(totalCount_nolarva_tax!=0) %>%
+  mutate(diff_A = adultCount-adultCount_tax, diff_N = nymphCount-nymphCount_tax, diff_L = larvaCount-larvaCount_tax, diff_total=totalCount_nolarva-totalCount_nolarva_tax) %>%
+  mutate(COMP_AN = diff_A + diff_N) %>%
+  filter(COMP_AN!=0) %>%
+  mutate(COMP_L = diff_total + diff_L) %>%
+  mutate(COMP_NL = diff_N + diff_L) %>%
+  filter(COMP_L==0, COMP_NL!=0) %>%
+  pull(sampleID) %>% length()
+# 2 are because of some weird combinations of mix-ups; a lot of things got mis-classified, but ultimately the number of ticks is correct.
+
+
+## Okay, so of those that have mismatches in adult/larva that cannot be explained by mere larval mis-haps, ... what happened?
+MATCHEDCOUNTS_tckfield_tcktax %>%
+  filter(adultCount != adultCount_tax | nymphCount != nymphCount_tax) %>%
+  filter(totalCount_nolarva_tax!=0) %>%
+  mutate(totalCount = adultCount + nymphCount + larvaCount, totalCount_tax = adultCount_tax+ nymphCount_tax + larvaCount_tax) %>%
+  filter(totalCount != totalCount_tax) %>%
+  pull(sampleID) %>%length()
+# there's 341 of them
+# What is the scale of error here? If tck_field > tck_tax, this makes sense-- they probably just didn't ID everything, or failed to ID some.
+# HOWEVER, if tck_tax > tck_field, this is is cause for concern-- where did the extra tick come from?? If the difference is small, it's not a big deal. If the difference is big, then it is a big deal.
+MATCHEDCOUNTS_tckfield_tcktax %>%
+  filter(adultCount != adultCount_tax | nymphCount != nymphCount_tax) %>%
+  filter(totalCount_nolarva_tax!=0) %>%
+  mutate(totalCount = adultCount + nymphCount + larvaCount, totalCount_tax = adultCount_tax+ nymphCount_tax + larvaCount_tax) %>%
+  filter(totalCount != totalCount_tax) %>%
+  mutate(total_diff = totalCount-totalCount_tax, nonLarv_diff = totalCount_nolarva-totalCount_nolarva_tax) %>%
+  select(total_diff, nonLarv_diff,everything()) %>%
+  View()
+MATCHEDCOUNTS_tckfield_tcktax %>%
+  filter(adultCount != adultCount_tax | nymphCount != nymphCount_tax) %>%
+  filter(totalCount_nolarva_tax!=0) %>%
+  mutate(totalCount = adultCount + nymphCount + larvaCount, totalCount_tax = adultCount_tax+ nymphCount_tax + larvaCount_tax) %>%
+  filter(totalCount != totalCount_tax) %>%
+  mutate(total_diff = totalCount-totalCount_tax, nonLarv_diff = totalCount_nolarva-totalCount_nolarva_tax) %>%
+  filter(total_diff>0) %>%
+  pull(sampleID) %>% length()
+# 220 of these, field counts are > tax counts
+MATCHEDCOUNTS_tckfield_tcktax %>%
+  filter(adultCount != adultCount_tax | nymphCount != nymphCount_tax) %>%
+  filter(totalCount_nolarva_tax!=0) %>%
+  mutate(totalCount = adultCount + nymphCount + larvaCount, totalCount_tax = adultCount_tax+ nymphCount_tax + larvaCount_tax) %>%
+  filter(totalCount != totalCount_tax) %>%
+  mutate(total_diff = totalCount-totalCount_tax, nonLarv_diff = totalCount_nolarva-totalCount_nolarva_tax) %>%
+  filter(total_diff<0, nonLarv_diff < -2) %>%
+  pull(sampleID) %>% length()
+
+
+#### STOP HERE ####
+
+
+
+
+##### Check if pathogens were sampled evenly off hosts
+tck_tax_filt %>%
+  left_join(tck_path_filt) %>%
+  select(testPathogenName, acceptedTaxonID) %>%
+  table(useNA="always")
+?table
+
+tck_tax_filt %>%
+  filter(acceptedTaxonID%in%c("AMBAME"))
+
+tck_tax_filt$acceptedTaxonID
+
+
+
+
+###### Plotting pathogen data to visualize variables #######
+
+# Now, let's see distribution of pathogens across plots and years
+dir.create("./output/EDA_plots/tick_pathogen")
+
+ggsave(filename="./output/EDA_plots/tick_pathogen/pathogen_vs_plotID.pdf", width=12, height=8,
+       tck_path_filt %>%
+         arrange(domainID, siteID) %>%
+         mutate(plotID=factor(plotID, levels=unique(plotID))) %>%
+         mutate(Year=year(as.Date(collectDate))) %>%
+         group_by(plotID, Year, testPathogenName) %>%
+         summarise(ProportionDetected = sum(testResult=="Positive")/length(testResult), TotalTests = length(testResult)) %>%
+         ggplot() +
+         geom_point(aes(x=plotID, y=testPathogenName, col=ProportionDetected, cex=log(TotalTests))) +
+         theme(axis.text.x = element_text(angle=90)) +
+         ylab("Pathogen Name") +
+         facet_wrap(.~Year, nrow=4)
+)
+
+dir.create("./output/EDA_plots/tick_pathogen/byPathogen")
+# Get ordered plotID by domain and site
+plot_order <- tck_path_filt %>%
+  arrange(domainID, siteID) %>%
+  pull(plotID) %>%
+  unique()
+for ( p in unique(tck_path_filt$testPathogenName)) {
+  ggsave(filename = paste0("./output/EDA_plots/tick_pathogen/byPathogen/",p,".pdf"), width=12, height=8,
+         tck_path_filt %>%
+           filter(testPathogenName==p) %>%
+           mutate(Year=year(as.Date(collectDate)), yDay = yday(as.Date(collectDate))) %>%
+           group_by(plotID, Year, yDay, testPathogenName) %>%
+           summarise(ProportionDetected = sum(testResult=="Positive")/length(testResult), TotalTests = length(testResult)) %>%
+           ungroup() %>%
+           mutate(ProportionDetected = ifelse(ProportionDetected>0,as.numeric(ProportionDetected),NA)) %>%
+           mutate(ProportionDetected = as.numeric(ProportionDetected), plotID = factor(plotID, levels=plot_order)) %>%
+           ggplot() +
+           geom_point(aes(x=yDay, y=plotID, col=(ProportionDetected), cex=log(TotalTests))) +
+           theme(axis.text.x = element_text(angle=90)) +
+           ylab("PlotID") + xlab("Day of year") +
+           scale_color_gradientn(limits = c(0,1),
+                                 colours=c("white", "red"),
+                                 breaks=c(0,1), labels=format(c(0,1)))+
+           xlim(c(0,365))+
+           scale_y_discrete(drop=FALSE)
+  )
+}
+
+
+dir.create("./output/EDA_plots/tick_pathogen/byPlot")
+for ( p in unique(tck_path_filt$plotID)) {
+  ggsave(filename=paste0("./output/EDA_plots/tick_pathogen/byPlot/",p,".pdf"), width=12, height=8,
+         tck_path_filt %>%
+           filter(plotID==p) %>%
+           mutate(Year=year(as.Date(collectDate)), yDay = yday(as.Date(collectDate))) %>%
+           group_by(plotID, Year, yDay, testPathogenName) %>%
+           summarise(ProportionDetected = sum(testResult=="Positive")/length(testResult), TotalTests = length(testResult)) %>%
+           ungroup() %>%
+           mutate(ProportionDetected = ifelse(ProportionDetected>0,ProportionDetected,NA)) %>%
+           mutate(ProportionDetected = as.numeric(ProportionDetected), plotID = factor(plotID, levels=plot_order)) %>%
+           ggplot() +
+           geom_point(aes(x=yDay, y=testPathogenName, col=ProportionDetected, cex=log(TotalTests))) +
+           theme(axis.text.x = element_text(angle=90)) +
+           ylab("PathogenName") + xlab("Day of year") +
+           scale_color_gradientn(limits = c(0,1),
+                                 colours=c("white", "red"),
+                                 breaks=c(0,1), labels=format(c(0,1)))+
+           xlim(c(0,365)) 
+  )  
+}
+
+dir.create("./output/EDA_plots/tick_pathogen/byDomain_pathogenvsdate")
+for ( d in unique(tck_path_filt$domainID)) {
+  nplots <- tck_path_filt %>%
+    filter(domainID==d) %>%
+    pull(plotID) %>%unique() %>%length()
+  ggsave(filename=paste0("./output/EDA_plots/tick_pathogen/byDomain_pathogenvsdate/",d,".pdf"), width=12, height=nplots*2+1,
+         tck_path_filt %>%
+           filter(domainID==d) %>%
+           mutate(Year=year(as.Date(collectDate)), yDay = yday(as.Date(collectDate))) %>%
+           group_by(siteID, plotID, Year, yDay, testPathogenName) %>%
+           summarise(ProportionDetected = sum(testResult=="Positive")/length(testResult), TotalTests = length(testResult)) %>%
+           ungroup() %>%
+           mutate(ProportionDetected = ifelse(ProportionDetected>0,ProportionDetected,NA)) %>%
+           mutate(ProportionDetected = as.numeric(ProportionDetected), plotID = factor(plotID, levels=plot_order)) %>%
+           ggplot() +
+           geom_point(aes(x=yDay, y=testPathogenName, col=ProportionDetected, cex=log(TotalTests))) +
+           theme(axis.text.x = element_text(angle=90)) +
+           ylab("PathogenName") + xlab("Day of year") +
+           scale_color_gradientn(limits = c(0,1),
+                                 colours=c("white", "red"),
+                                 breaks=c(0,1), labels=format(c(0,1)))+
+           xlim(c(0,365)) +
+           facet_grid(siteID+ plotID ~ .)
+  )
+}
+
+###### Check: are certain ticks found in certain areas? Are certain pathogens only found on certain ticks? 
+
+
+
+
+
+
+######## FINAL CHANGES
+# Add Year, Day_of_Year
+# Remove 2019 from tck_field
+# Merge duplicated sampleIDs so that it is essentially one long tick drag.
 

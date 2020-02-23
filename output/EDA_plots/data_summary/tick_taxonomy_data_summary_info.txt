@@ -26,9 +26,16 @@ genus                affinis americanum andersoni angustus dentatus leporispalus
   Haemaphysalis    0       0          0         0        0        0               11
   Ixodes           0       5          0         0       24        1                0
                specificEpithet
-genus           longicornis maculatum marxi muris pacificus scapularis  sp. spp. variabilis
-                          0         0     0     0         0          0  648    0          0
-  Amblyomma               0        37     0     0         0          0   29    5          0
-  Dermacentor             0         0     0     0         0          0    0    0        641
-  Haemaphysalis          18         0     0     0         0          0    0    0          0
-  Ixodes                  0         0     2     6        19        669    0    3          0
+genus           longicornis maculatum marxi muris pacificus scapularis  sp. spp.
+                          0         0     0     0         0          0  648    0
+  Amblyomma               0        37     0     0         0          0   29    5
+  Dermacentor             0         0     0     0         0          0    0    0
+  Haemaphysalis          18         0     0     0         0          0    0    0
+  Ixodes                  0         0     2     6        19        669    0    3
+               specificEpithet
+genus           variabilis
+                         0
+  Amblyomma              0
+  Dermacentor          641
+  Haemaphysalis          0
+  Ixodes                 0
