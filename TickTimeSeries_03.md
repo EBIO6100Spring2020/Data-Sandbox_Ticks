@@ -340,7 +340,7 @@ Next steps/Questions
 
 -   How to build in other covariates...?
 
--Should this really be a multivariate time series with multiple plots? instead of a separate time series for each plot? Plots with lots of data should inform other time series, maybe...
+-   Should this really be a multivariate time series with multiple plots? instead of a separate time series for each plot? Plots with lots of data should inform other time series, maybe...
 
 -   If so, we need to model the hierarchy: plots nested within sites nested within domains.
 
