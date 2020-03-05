@@ -53,3 +53,6 @@ data_derived/
 
 # Don't upload small mammal data
 data_raw/filesToStack10072
+
+# Don't upload RData
+machineLearnSpace.RData
