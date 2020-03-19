@@ -35,7 +35,7 @@ gam.check(g.g)
 
 # try a negative binomial
 g.nb <- gam(estimatedCount ~ nlcdClass + s(month) , offset = log(totalSampledArea), data = nymph, family = nb, method = "REML")
-plot(ng.nb, residuals = TRUE, pch = 1, all.terms = TRUE)
+plot(g.nb, residuals = TRUE, pch = 1, all.terms = TRUE)
 # this looks super weird...
 
 
