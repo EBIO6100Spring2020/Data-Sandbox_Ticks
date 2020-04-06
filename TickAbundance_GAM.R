@@ -8,10 +8,11 @@ library(dplyr)
 library(ggplot2)
 library(tidyr)
 # library(padr)
-library(rjags)
-library(mgcv)
-library(brms)
-library(schoenberg)
+library(rjags) 
+library(mgcv) # fitting GAMS
+library(brms) # fitting Bayesian models
+library(schoenberg) # for brms plots (not used yet)
+library(itsadug) # for plotting RE with GAM
 
 #### Read in and clean up data ####
 # read in training set
@@ -34,6 +35,7 @@ nymph %>% mutate(nymph_presence = case_when(estimatedCount > 0 ~ 1, estimatedCou
 # add scaled/logged variables
 nymph$logSampledArea <- log(nymph$totalSampledArea)
 nymph$sDecimalLongitude <- scale(nymph$decimalLongitude)
+nymph$sDecimalLatitude <- scale(nymph$decimalLatitude)
 nymph$sDayofYear <- scale(nymph$dayOfYear)
 
 #### Run simple GAMs #####
@@ -55,10 +57,46 @@ gam.check(gam_log_dens)
 
 #### Binomial GAM with presence/absence ####
 
-gam_binom <- bam(nymph_presence ~ nlcdClass + siteID + s(sDayofYear) + s(sDecimalLongitude),
-                 data = nymph)
+gam_binom <- gam(nymph_presence ~ nlcdClass + siteID + s(sDayofYear) + s(sDecimalLongitude),
+                 data = nymph, family = binomial)
 summary(gam_binom)
-plot(gam_binom, pch = 1, all.terms = TRUE, pages = 1)
+plot(gam_binom, pch = 1, all.terms = TRUE, pages = 1, trans = plogis)
+termplot(gam_binom, pch = 1, rug = FALSE,
+         se = TRUE, terms = "nlcdClass", 
+         las =2)
+termplot(gam_binom, pch = 1, rug = FALSE,
+         se = TRUE, terms = "siteID", 
+         las =2)
+
+#### Add Random Effects to Binomial GAM  ####
+gam_binom_re <- gam(nymph_presence ~ nlcdClass+ s(sDayofYear) + te(sDecimalLongitude, sDecimalLatitude) +
+                       s(siteID, bs = "re")+s(plotID, bs = "re"), data = nymph, family = binomial)
+summary(gam_binom_re)
+# lat and long seem to have no impact now...
+plot(gam_binom_re, pages = 1)
+plot_smooth(gam_binom_re, view = "sDayofYear", cond=list(nlcdClass = "deciduousForest"),
+            rm.ranef=TRUE, rug = FALSE, transform = plogis)
+
+plot_smooth(gam_binom_re, view = "sDayofYear", cond=list(nlcdClass = "deciduousForest", plotID = "TALL_008"),
+            col = "blue", rug = FALSE, transform = plogis)
+plot_smooth(gam_binom_re, view = "sDayofYear", cond=list(nlcdClass = "deciduousForest", plotID = "TREE_017"),
+            col = "red", rug = FALSE,  transform = plogis, add = TRUE)
+# looks like plotID >> siteID
+
+# random slopes 
+gam_binom_rs <- gam(nymph_presence ~ nlcdClass+ s(sDayofYear) + te(sDecimalLongitude, sDecimalLatitude) +
+                      +s(plotID, bs = "re") + s(plotID, sDayofYear, bs = "re"), data = nymph, family = binomial)
+plot_smooth(gam_binom_rs, view = "sDayofYear", cond=list(nlcdClass = "deciduousForest"),
+            rm.ranef=TRUE, rug = FALSE, transform = plogis)
+
+plot_smooth(gam_binom_rs, view = "sDayofYear", cond=list(nlcdClass = "deciduousForest", plotID = "TALL_008"),
+            col = "blue", rug = FALSE, transform = plogis)
+plot_smooth(gam_binom_rs, view = "sDayofYear", cond=list(nlcdClass = "deciduousForest", plotID = "TREE_017"),
+            col = "red", rug = FALSE,  transform = plogis, add = TRUE)
+plot_smooth(gam_binom_rs, view = "sDayofYear", cond=list(nlcdClass = "deciduousForest", plotID = "OSBS_001"),
+            col = "green", rug = FALSE,  transform = plogis, add = TRUE)
+plot_smooth(gam_binom_rs, view = "sDayofYear", cond=list(nlcdClass = "deciduousForest", plotID = "UNDE_019"),
+            col = "purple", rug = FALSE,  transform = plogis, add = TRUE)
 
 #### Run GAM with negative binomial family ####
 # try a negative binomial
@@ -105,3 +143,12 @@ par(mfrow=c(1,1))
 vis.gam(gam_count_ziplss_2, view = c("sDayofYear", "sDecimalLongitude"), plot.type = "contour", scheme = TRUE, pch = 1, residuals = TRUE, cex = 1, cex.axis = 1)
 
 summary(gam_count_ziplss_2)
+
+
+#### To do list ####
+# incorporate random intercepts/slopes into other GAMM families
+# hurdle or Ziplss model refinement
+# try brms
+# model selection
+# test on other dataset and quantify error
+
