@@ -5,6 +5,7 @@ library(lme4) # mixed effect models
 library(boot) # logit/inv logit
 library(car) # Anova (type III)
 library(mgcv) # for GAMs
+library(randomForest) # for random forest
 
 tck <- read.csv("data_derived/MASTER_all_tck_data_merged.csv")
 
@@ -12,14 +13,42 @@ tck <- read.csv("data_derived/MASTER_all_tck_data_merged.csv")
 tck %>%
   mutate(tested=ifelse(is.na(testingID),"no","yes")) %>%
   select(plotID, tested) %>% table(useNA="ifany")
-# There are only a few plots that are actually tested for any tick pathogen.
-# Let's filter those out.
-testedPlots <- tck %>%
-  mutate(tested=ifelse(is.na(testingID),0,1)) %>%
-  group_by(plotID) %>%
-  summarize(anyTested=sum(tested)) %>% filter(anyTested>0) %>%pull(plotID) %>%as.character()
 
-# Okay, let's also filter by plots that NEVER had any positive borrelia
+
+# Plot over time, by year, by plot, to see how zero-inflated it is.
+tck_allsamples_borr <- tck %>%
+  mutate(tested=ifelse(is.na(Borrelia_sp.),0,1)
+         ,isPositive=ifelse(Borrelia_sp.=="Positive", 1,0)
+  ) %>%
+  group_by(domainID, siteID, nlcdClass, plotID, elevation, collectDate, dayOfYear, year, month) %>%
+  summarize(numberTested=sum(tested, na.rm=TRUE)
+            ,n=n()
+            , numberPositive=sum(isPositive,na.rm = TRUE)
+            , nAdult=sum(lifeStage=="Adult")
+            , nNymph=sum(lifeStage=="Nymph")
+            , nLarva=sum(lifeStage=="Larva")) %>%
+  ungroup() %>%
+  mutate(proportionTested=numberTested/nNymph
+         , proportionPositive=numberPositive/numberTested
+         , tested = ifelse(numberTested > 0 , TRUE, FALSE)
+         , testingStatus = ifelse(numberTested > 0, "Tested", ifelse(nNymph>0, "Nymphs present, not tested", "No nymphs"))
+         ) %>%
+  mutate(nlcdClass=factor(nlcdClass, levels=c("emergentHerbaceousWetlands","cultivatedCrops","pastureHay","grasslandHerbaceous"
+                                              ,"dwarfScrub","shrubScrub","sedgeHerbaceous"
+                                              ,"woodyWetlands","deciduousForest","evergreenForest","mixedForest"))) %>%
+  mutate(borrPresent = ifelse(numberPositive>0,1,0)
+         , domainID = factor(as.character(domainID))
+         , siteID = factor(as.character(siteID))
+         , plotID = factor(as.character(plotID))) 
+
+tck_allsamples_borr %>%
+  ggplot() + geom_point(aes(x=dayOfYear, y=plotID, fill=proportionPositive, col=testingStatus), pch=21) +
+  scale_fill_gradient(low="white", high="darkred") +
+  scale_color_manual(values=c(Tested="blue", `Nymphs present, not tested`="grey", `No nymphs`="white")) +
+  facet_grid(.~year)
+
+
+# Let's also filter by plots that NEVER had any positive borrelia
 infectedPlots <- tck %>%
   filter(Borrelia_sp.=="Positive") %>%
   select(plotID) %>%pull() %>% unique()
@@ -37,8 +66,10 @@ tck_borrelia_fullzeroes <- tck %>%
             , nNymph=sum(lifeStage=="Nymph")
             , nLarva=sum(lifeStage=="Larva")) %>%
   ungroup() %>%
-  mutate(proportionTested=numberTested/n
-         , proportionPositive=numberPositive/numberTested) %>%
+  mutate(proportionTested=numberTested/nNymph
+         , proportionPositive=numberPositive/numberTested
+         , tested = ifelse(numberTested > 0 , TRUE, FALSE)
+         , testingStatus = ifelse(numberTested > 0, "Tested", ifelse(nNymph>0, "Nymphs present, not tested", "No nymphs"))) %>%
   mutate(nlcdClass=factor(nlcdClass, levels=c("emergentHerbaceousWetlands","cultivatedCrops","pastureHay","grasslandHerbaceous"
                                               ,"dwarfScrub","shrubScrub","sedgeHerbaceous"
                                               ,"woodyWetlands","deciduousForest","evergreenForest","mixedForest"))) %>%
@@ -46,6 +77,12 @@ tck_borrelia_fullzeroes <- tck %>%
          , domainID = factor(as.character(domainID))
          , siteID = factor(as.character(siteID))
          , plotID = factor(as.character(plotID))) 
+
+tck_borrelia_fullzeroes %>%
+  ggplot() + geom_point(aes(x=dayOfYear, y=plotID, fill=proportionPositive, col=testingStatus), pch=21) +
+  scale_fill_gradient(low="white", high="darkred") +
+  scale_color_manual(values=c(Tested="blue", `Nymphs present, not tested`="grey", `No nymphs`="white")) +
+  facet_grid(.~year)
 
 
 tck_borrelia <- tck %>%
@@ -55,14 +92,17 @@ tck_borrelia <- tck %>%
   ) %>%
   group_by(domainID, siteID, nlcdClass, plotID, elevation, collectDate, dayOfYear, year, month) %>%
   summarize(numberTested=sum(tested, na.rm=TRUE)
+            , tested = ifelse(numberTested > 0, TRUE, FALSE)
             ,n=n()
             , numberPositive=sum(isPositive,na.rm = TRUE)
             , nAdult=sum(lifeStage=="Adult")
             , nNymph=sum(lifeStage=="Nymph")
             , nLarva=sum(lifeStage=="Larva")) %>%
   ungroup() %>%
-  mutate(proportionTested=numberTested/n
-         , proportionPositive=numberPositive/numberTested) %>%
+  mutate(proportionTested=numberTested/nNymph
+         , proportionPositive=numberPositive/numberTested
+         , tested = ifelse(numberTested > 0 , TRUE, FALSE)
+         , testingStatus = ifelse(numberTested > 0, "Tested", ifelse(nNymph>0, "Nymphs present, not tested", "No nymphs"))) %>%
   mutate(nlcdClass=factor(nlcdClass, levels=c("emergentHerbaceousWetlands","cultivatedCrops","pastureHay","grasslandHerbaceous"
                                                 ,"dwarfScrub","shrubScrub","sedgeHerbaceous"
                                                 ,"woodyWetlands","deciduousForest","evergreenForest","mixedForest"))) %>%
@@ -72,7 +112,12 @@ tck_borrelia <- tck %>%
          , plotID = factor(as.character(plotID))) %>%
   mutate(numberPositive=ifelse(numberTested==0,NA,numberPositive)) %>%
   filter(numberTested!=0)
-View(tck_borrelia)
+
+tck_borrelia %>%
+  ggplot() + geom_point(aes(x=dayOfYear, y=plotID, fill=proportionPositive, col=testingStatus), pch=21) +
+  scale_fill_gradient(low="white", high="darkred") +
+  scale_color_manual(values=c(Tested="blue", `Nymphs present, not tested`="grey", `No nymphs`="white")) +
+  facet_grid(.~year)
 
 #### Preliminary Plotting ####
 
@@ -86,18 +131,13 @@ tck_borrelia %>%
   filter(numberPositive>0) %>%
   ggplot() +geom_histogram(aes(x=log(numberPositive)))
 
-
-# Try to plot on by-plot scale so we can actually see how bad zero-inflation is.
-
-allPlots <- as.character(tck_borrelia %>%select(plotID) %>%pull() %>%unique())
+# What is relationship between proportion positive and number positive
 tck_borrelia %>%
-  # filter(plotID==allPlots[15]) %>%
-  group_by(domainID, siteID, nlcdClass, plotID, month ) %>%
-  summarize(numberPositive=sum(numberPositive, na.rm=TRUE)
-            , numberTested=sum(numberTested, na.rm=TRUE)) %>%
-  ungroup() %>%
-  mutate(proportionPositive=numberPositive/numberTested)%>%
-  ggplot() + geom_line(aes(x=month, y=numberPositive, col=plotID))  
+  ggplot() +geom_point(aes(x=log(numberPositive), y=log(proportionPositive)))
+# What in the world...? Is that straight line? It exists across year, domainID, month, nlcdClass....
+tck_borrelia %>%
+  filter(nlcdClass=="deciduousForest") %>% # Switch out for year, domain, month, etc
+  ggplot() +geom_point(aes(x=log(numberPositive), y=log(proportionPositive), cex=log(nNymph)))
 
 #### Using basic poisson model #####
 mod.pois1 <- glm(numberPositive ~ factor(month) + nNymph + nlcdClass
@@ -114,20 +154,105 @@ sum(tck_borrelia$numberPositive==0)
 #### Basic hurdle model #####
 # Now, let's try a simple hurdle model with just month and nNymph.
 library("pscl") # for hurdle
-mod.hurdle <- hurdle(numberPositive ~ factor(month)
-       , data=tck_borrelia
-       , offset=numberTested
-       
-       )
-
 mod.hurdle <- hurdle(numberPositive ~ 1
-                     , data=tck_borrelia
-                     # , offset = numberTested
-                     # , dist = "negbin"
-                     )
-
+       , data=tck_borrelia
+       # , offset=numberTested
+       , dist = "poisson"
+       )
 summary(mod.hurdle)
-inv.logit(-0.6739)
+predict(mod.hurdle)
+# Why does it predict a constant..? Beause no predictors?
+
+mod.hurdle1 <- hurdle(numberPositive ~ nNymph
+                     , data=tck_borrelia
+                     # , offset=numberTested
+                     , dist = "poisson"
+)
+summary(mod.hurdle1)
+plot(tck_borrelia$numberPositive, predict(mod.hurdle1))
+plot((tck_borrelia$numberPositive-predict(mod.hurdle1))~ predict(mod.hurdle1))
+
+
+
+mod.hurdle2 <- hurdle(numberPositive ~ nNymph + nlcdClass
+                      , data=tck_borrelia
+                      # , offset=numberTested
+                      , dist = "poisson"
+)
+summary(mod.hurdle2)
+plot(tck_borrelia$numberPositive, predict(mod.hurdle2))
+plot((tck_borrelia$numberPositive-predict(mod.hurdle2))~ predict(mod.hurdle2))
+
+# The models keep failing when I try to use "complicated" models. Not sure what it is-- not enough data?
+
+#### GAM ####
+
+### First thing: when alone, does the number of nymphs change the number of positive
+mod.gam <- gam(numberPositive ~ offset(numberTested) + s(dayOfYear, sp=2) 
+    , data=tck_borrelia
+    , method="REML")
+summary(mod.gam)
+plot(mod.gam, pages=1)
+
+mod.gam1 <- gam(numberPositive ~ offset(numberTested) + s(dayOfYear, sp=2) + nNymph
+               , data=tck_borrelia
+               , method="REML"
+)
+summary(mod.gam1)
+plot(mod.gam1, pages=1)
+
+mod.gam1 <- gam(proportionPositive ~ offset(numberTested) + s(dayOfYear, sp=2) + nNymph
+                , data=tck_borrelia
+                , method="REML"
+)
+summary(mod.gam1)
+plot(mod.gam1, pages=1)
+
+tck_borrelia %>% ggplot() + geom_point(aes(x=log(numberTested), y=log(nNymph)))
+
+mod.gam2 <- gam(numberPositive ~ offset(numberTested) + s(dayOfYear, sp=2) + nNymph 
+                , data=tck_borrelia
+                , method="REML")
+summary(mod.gam2)
+plot(mod.gam2, pages=1)
+plot(mod.gam2$residuals ~ mod.gam2$fitted.values)
+plot(mod.gam2$fitted.values ~ tck_borrelia$numberPositive, ylim=c(-200,200))
+# There's one outlier
+
+mod.gam3 <- gam(numberPositive ~ offset(numberTested) + s(dayOfYear, sp=2) + nNymph + s(plotID, bs="re")
+                , data=tck_borrelia
+                , method="REML")
+summary(mod.gam3)
+plot(mod.gam3, pages=1)
+plot(mod.gam3$residuals ~ mod.gam3$fitted.values)
+plot(mod.gam3$fitted.values ~ tck_borrelia$numberPositive, ylim=c(-200,200))
+# There's one outlier
+
+mod.gam3a <- gam(numberPositive ~ offset(numberTested) + s(dayOfYear, sp=2) + s(plotID, bs="re")
+                , data=tck_borrelia
+                , method="REML")
+summary(mod.gam3a)
+plot(mod.gam3a, pages=1)
+plot(mod.gam3a$residuals ~ mod.gam3a$fitted.values)
+plot(mod.gam3a$fitted.values ~ tck_borrelia$numberPositive, ylim=c(-200,200))
+# There's one outlier
+
+mod.gam4 <- gam(log(numberPositive+1) ~ offset(log(numberTested)) + s(dayOfYear, sp=2) + nNymph + s(plotID, bs="re")+nlcdClass
+                , data=tck_borrelia
+                , method="REML")
+mod.gam4 <- gam(log(numberPositive+1) ~ offset(log(numberTested)) + s(dayOfYear, sp=6) + nNymph 
+                , data=tck_borrelia
+                , method="REML")
+summary(mod.gam4)
+plot(mod.gam4, pages=1)
+gam.check(mod.gam4)
+
+
+plot(mod.gam4$residuals ~ mod.gam4$fitted.values)
+plot(mod.gam4$fitted.values ~ log(tck_borrelia$numberPositive+1)) 
+abline(a = 0, b=1)
+# There's one outlier
+
 #### Binomial ######
 ### Hmmmm not working. Let's try a poor-man's hurdle model
 bin.intercept <- glm(borrPresent ~ 1
@@ -190,22 +315,23 @@ ranef(ggnorm.mod3)
 
 
 #### Trying GAM ####
+
 gam1 <- gam(numberPositive ~ s(dayOfYear)+ s(nNymph)+ nlcdClass
-    ,data=tck_borrelia_nozeros
+    ,data=tck_borrelia
     , method = "REML"
     , family = "quasipoisson")
 gam.check(gam1)
 summary(gam1)
 plot(gam1, shift=coef(gam1)[1], pages=1, seWithMean = TRUE, scheme = 2)
-
-gam2 <- gam(numberPositive ~ s(dayOfYear) + nNymph+ ti(dayOfYear,nNymph)+nlcdClass
-            ,data=tck_borrelia_fullzeroes
-            , method = "REML"
-            )
-gam.check(gam2)
-summary(gam2)
-plot(gam2, shift=coef(gam2)[1], seWithMean = TRUE, scheme=1, pages=1)
-vis.gam(gam2, view=c("dayOfYear","nNymph"), too.far = 0.05, theta=45)
+# 
+# gam2 <- gam(numberPositive ~ s(dayOfYear) + nNymph+ ti(dayOfYear,nNymph)+nlcdClass
+#             ,data=tck_borrelia_fullzeroes
+#             , method = "REML"
+#             )
+# gam.check(gam2)
+# summary(gam2)
+# plot(gam2, shift=coef(gam2)[1], seWithMean = TRUE, scheme=1, pages=1)
+# vis.gam(gam2, view=c("dayOfYear","nNymph"), too.far = 0.05, theta=45)
 
 gam3 <- gam(numberPositive ~ s(dayOfYear) + s(nNymph)+ ti(dayOfYear,nNymph) + nlcdClass
             ,data=tck_borrelia_fullzeroes
