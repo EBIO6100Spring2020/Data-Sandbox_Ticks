@@ -38,7 +38,7 @@ nymph$sDayofYear <- scale(nymph$dayOfYear)
 
 #### Run simple GAMs #####
 # gaussian
-gam_dens <- gam(density ~ nlcdClass + siteID + s(month) + s(decimalLongitude),
+gam_dens <- gam(density ~ nlcdClass + siteID + s(sDayofYear) + s(sDecimalLongitude),
              data = nymph, method = "REML")
 summary(gam_dens)
 plot(gam_dens, residuals = TRUE, pch = 1, all.terms = TRUE, pages = 1)
@@ -47,18 +47,19 @@ hist(nymph$density)
 # does log density perform any better?
 hist(log(nymph$density+1))
 # not really, and still very zero-inflated
-gam_log_dens <- gam(log(density+1) ~ nlcdClass + + siteID+ s(month) + s(decimalLongitude) , data = nymph, method = "REML")
+gam_log_dens <- gam(log(density+1) ~ nlcdClass + siteID+ s(sDayofYear) + s(sDecimalLongitude) , data = nymph, method = "REML")
 plot(gam_log_dens, residuals = TRUE, pch = 1, all.terms = TRUE, pages = 1)
 summary(gam_log_dens)
 gam.check(gam_log_dens)
 # log-density still not gaussian, consider another family
 
-#### Try GAM for presence/absence ####
-table(nymph$nymph_presence, nymph$domainID)
-table(nymph$nymph_presence, nymph$plotID)
-table(nymph$nymph_presence, nymph$nlcdClass)
+#### Binomial GAM with presence/absence ####
 
-gam_binom <- gam(nymph_presence ~ s())
+gam_binom <- bam(nymph_presence ~ nlcdClass + siteID + s(sDayofYear) + s(sDecimalLongitude),
+                 data = nymph)
+summary(gam_binom)
+plot(gam_binom, pch = 1, all.terms = TRUE, pages = 1)
+
 #### Run GAM with negative binomial family ####
 # try a negative binomial
 gam_count_nb <- gam(estimatedCount ~ s(month) + s(plotID, bs = "re"), offset = log(totalSampledArea), data = nymph, family = nb, method = "REML")
