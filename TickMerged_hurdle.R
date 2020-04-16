@@ -44,10 +44,12 @@ tck_allsamples_borr <- tck %>%
          , year = factor(year)
          , tckDensity = sum(c(nLarva, nNymph, nAdult))/n
          , ntckDensity = nNymph/n
-         , NLtckDensity = sum(c(nNymph, nAdult), na.rm = TRUE)/n)  %>%
+         , NLtckDensity = sum(c(nNymph, nAdult), na.rm = TRUE)/n
+         , atckDensity = nAdult/n)  %>%
   mutate(lognymphDensity=log(ntckDensity)
          , logNLtckDensity=log(NLtckDensity)
-         , logtckDensity = log(tckDensity))
+         , logtckDensity = log(tckDensity)
+         , logadultDensity=log(atckDensity))
 
 ## Plot over time, by year, by plot, to see how zero-inflated it is.
 tck_allsamples_borr %>%
@@ -119,16 +121,228 @@ tck_borrelia_adj <- tck_borrelia %>%
 
 # First, model a binomial component with dayOfYear, nlcdClass, and non-larval tick density (NLtckDensity) as predictors of borrellia presence/absence.
 # Plot is a random effect, which I include as a varying-intercept, varying-slope model.
-mod.gambin <- gam(borrPresent ~ s(dayOfYear) + nlcdClass + s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + s(logNLtckDensity) + offset(log(numberTested))
+mod.gambin_all <- gam(borrPresent ~ s(dayOfYear) + nlcdClass + 
+                    s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + 
+                    s(year, bs="re") + s(dayOfYear, year, bs="re") +
+                    s(logNLtckDensity) + s(lognymphDensity) + s(logadultDensity) + s(logtckDensity) +
+                    s(elevation) + 
+                    offset(log(numberTested)) 
                 # , offset=log(numberTested) # I include the offset in the formula instead, so that it is included in predictions. Including it here does NOT incorporate numberTested in predictiosn.
                 , data=tck_borrelia_adj
                 , method="REML"
                 , family=binomial)
+summary(mod.gambin_all)
+
+mod.gambin_noanytckDensity <- gam(borrPresent ~ s(dayOfYear) + nlcdClass + 
+                        s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + 
+                        s(year, bs="re") + s(dayOfYear, year, bs="re") +
+                        # s(logNLtckDensity) + s(lognymphDensity) + s(logadultDensity) + 
+                        s(elevation) + 
+                        offset(log(numberTested)) 
+                      # , offset=log(numberTested) # I include the offset in the formula instead, so that it is included in predictions. Including it here does NOT incorporate numberTested in predictiosn.
+                      , data=tck_borrelia_adj
+                      , method="REML"
+                      , family=binomial)
+summary(mod.gambin_noanytckDensity)
+c(mod.gambin_all$aic-mod.gambin_noanytckDensity$aic) # fit is actually better if we DON'T include tck density
+
+mod.gambin_noelevation <- gam(borrPresent ~ s(dayOfYear) + nlcdClass + 
+                                s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + 
+                                s(year, bs="re") + s(dayOfYear, year, bs="re") +
+                                # s(logNLtckDensity) + s(lognymphDensity) + s(logadultDensity) + s(logtckDensity) +
+                                # s(elevation) + 
+                                offset(log(numberTested)) 
+                              # , offset=log(numberTested) # I include the offset in the formula instead, so that it is included in predictions. Including it here does NOT incorporate numberTested in predictiosn.
+                              , data=tck_borrelia_adj
+                              , method="REML"
+                              , family=binomial)
+c(mod.gambin_noanytckDensity$aic - mod.gambin_noelevation$aic) # fit is better WITH elevation
+
+# Check how fit is if we do the reverse-- include tck density but exclude elevation
+mod.gambin_noelevation_wdensity <- gam(borrPresent ~ s(dayOfYear) + nlcdClass + 
+                                s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + 
+                                s(year, bs="re") + s(dayOfYear, year, bs="re") +
+                                s(logNLtckDensity) +
+                                # s(elevation) + 
+                                offset(log(numberTested)) 
+                              # , offset=log(numberTested) # I include the offset in the formula instead, so that it is included in predictions. Including it here does NOT incorporate numberTested in predictiosn.
+                              , data=tck_borrelia_adj
+                              , method="REML"
+                              , family=binomial)
+c(mod.gambin_noanytckDensity$aic, mod.gambin_noelevation$aic, mod.gambin_noelevation_wdensity$aic) # fit is better WITH elevation
+
+mod.gambin_noyear <- gam(borrPresent ~ s(dayOfYear) + nlcdClass + 
+                                s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + 
+                                # s(year, bs="re") + s(dayOfYear, year, bs="re") +
+                                # s(logNLtckDensity) + s(lognymphDensity) + s(logadultDensity) + s(logtckDensity) +
+                                s(elevation) +
+                                offset(log(numberTested)) 
+                              # , offset=log(numberTested) # I include the offset in the formula instead, so that it is included in predictions. Including it here does NOT incorporate numberTested in predictiosn.
+                              , data=tck_borrelia_adj
+                              , method="REML"
+                              , family=binomial)
+c(mod.gambin_noanytckDensity$aic - mod.gambin_noyear$aic) # fit is better WITH year
+
+mod.gambin_noplot <- gam(borrPresent ~ s(dayOfYear) + nlcdClass +
+                           # s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") +
+                           s(year, bs="re") + s(dayOfYear, year, bs="re") +
+                           # s(logNLtckDensity) + s(lognymphDensity) + s(logadultDensity) + s(logtckDensity) +
+                           s(elevation) +
+                           offset(log(numberTested))
+                         # , offset=log(numberTested) # I include the offset in the formula instead, so that it is included in predictions. Including it here does NOT incorporate numberTested in predictiosn.
+                         , data=tck_borrelia_adj
+                         , method="REML"
+                         , family=binomial)
+c(mod.gambin_noanytckDensity$aic - mod.gambin_noplot$aic) # fit is better WITH plot
+
+
+mod.gambin_nonlcdClass <- gam(borrPresent ~ s(dayOfYear) + #nlcdClass +
+                           s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") +
+                           s(year, bs="re") + s(dayOfYear, year, bs="re") +
+                           # s(logNLtckDensity) + s(lognymphDensity) + s(logadultDensity) + s(logtckDensity) +
+                           s(elevation) +
+                           offset(log(numberTested))
+                         # , offset=log(numberTested) # I include the offset in the formula instead, so that it is included in predictions. Including it here does NOT incorporate numberTested in predictiosn.
+                         , data=tck_borrelia_adj
+                         , method="REML"
+                         , family=binomial)
+c(mod.gambin_noanytckDensity$aic - mod.gambin_nonlcdClass$aic) # fit is actually better WITHOUT nlcdClass
+
+mod.gambin_nodayOfYear <- gam(borrPresent ~ #s(dayOfYear) + #nlcdClass +
+                                s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") +
+                                s(year, bs="re") + s(dayOfYear, year, bs="re") +
+                                # s(logNLtckDensity) + s(lognymphDensity) + s(logadultDensity) + s(logtckDensity) +
+                                s(elevation) +
+                                offset(log(numberTested))
+                              # , offset=log(numberTested) # I include the offset in the formula instead, so that it is included in predictions. Including it here does NOT incorporate numberTested in predictiosn.
+                              , data=tck_borrelia_adj
+                              , method="REML"
+                              , family=binomial)
+c(mod.gambin_nonlcdClass$aic - mod.gambin_nodayOfYear$aic) # fit is  better WITH dayOfYear
+
+# Double check nlcdClass and elevation are not conflated?
+mod.gambin_noelev_wnlcd <- gam(borrPresent ~ nlcdClass +# s(dayOfYear)  +
+                                s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") +
+                                s(year, bs="re") + s(dayOfYear, year, bs="re") +
+                                # s(logNLtckDensity) + s(lognymphDensity) + s(logadultDensity) + s(logtckDensity) +
+                                # s(elevation) +
+                                offset(log(numberTested))
+                              # , offset=log(numberTested) # I include the offset in the formula instead, so that it is included in predictions. Including it here does NOT incorporate numberTested in predictiosn.
+                              , data=tck_borrelia_adj
+                              , method="REML"
+                              , family=binomial)
+mod.gambin_noelev_wnlcd$aic
+mod.gambin_nonlcdClass$aic
+# Yup, nlcd Class doesn't contain much info.
+
+# Now check; do I need interactions for random effects?
+summary(mod.gambin_nonlcdClass) # best fitting model so far
+mod.gambin_noplot <- gam(borrPresent ~ s(dayOfYear) + #nlcdClass +
+                                s(dayOfYear,plotID, bs="re") +# s(plotID, bs="re") + 
+                                s(year, bs="re") + s(dayOfYear, year, bs="re") +
+                                # s(logNLtckDensity) + s(lognymphDensity) + s(logadultDensity) + s(logtckDensity) +
+                                s(elevation) +
+                                offset(log(numberTested))
+                              # , offset=log(numberTested) # I include the offset in the formula instead, so that it is included in predictions. Including it here does NOT incorporate numberTested in predictiosn.
+                              , data=tck_borrelia_adj
+                              , method="REML"
+                              , family=binomial)
+c(mod.gambin_nonlcdClass$aic - mod.gambin_noplot$aic) # model is slightly worse without plots, but BARELY. Keep in.
+
+
+summary(mod.gambin_nonlcdClass) # best fitting model so far
+mod.gambin_noplotInter <- gam(borrPresent ~ s(dayOfYear) + #nlcdClass +
+                           s(plotID, bs="re") + 
+                           s(year, bs="re") + s(dayOfYear, year, bs="re") +
+                           # s(logNLtckDensity) + s(lognymphDensity) + s(logadultDensity) + s(logtckDensity) +
+                           s(elevation) +
+                           offset(log(numberTested))
+                         # , offset=log(numberTested) # I include the offset in the formula instead, so that it is included in predictions. Including it here does NOT incorporate numberTested in predictiosn.
+                         , data=tck_borrelia_adj
+                         , method="REML"
+                         , family=binomial)
+c(mod.gambin_nonlcdClass$aic - mod.gambin_noplotInter$aic) # model is  worse without plot interaction
+
+summary(mod.gambin_nonlcdClass) # best fitting model so far
+mod.gambin_noyearInter <- gam(borrPresent ~ s(dayOfYear) + #nlcdClass +
+                           s(dayOfYear,plotID, bs="re") + s(plotID, bs="re") + 
+                           s(year, bs="re") +# s(dayOfYear, year, bs="re") +
+                           # s(logNLtckDensity) + s(lognymphDensity) + s(logadultDensity) + s(logtckDensity) +
+                           s(elevation) +
+                           offset(log(numberTested))
+                         # , offset=log(numberTested) # I include the offset in the formula instead, so that it is included in predictions. Including it here does NOT incorporate numberTested in predictiosn.
+                         , data=tck_borrelia_adj
+                         , method="REML"
+                         , family=binomial)
+c(mod.gambin_nonlcdClass$aic - mod.gambin_noyearInter$aic) # model is slightly better with interaction of year, dayofyear;Keep in.
+
+# See if domain has an effect
+mod.gambin_domain <- gam(borrPresent ~ s(dayOfYear) + #nlcdClass +
+                                s(dayOfYear,plotID, bs="re") + s(plotID, bs="re") + 
+                                s(year, bs="re") +# s(dayOfYear, year, bs="re") +
+                                # s(logNLtckDensity) + s(lognymphDensity) + s(logadultDensity) + s(logtckDensity) +
+                                s(elevation) + s(domainID, bs="re") + s(domainID, dayOfYear, bs="re") +
+                                offset(log(numberTested))
+                              # , offset=log(numberTested) # I include the offset in the formula instead, so that it is included in predictions. Including it here does NOT incorporate numberTested in predictiosn.
+                              , data=tck_borrelia_adj
+                              , method="REML"
+                              , family=binomial)
+c(mod.gambin_nonlcdClass$aic - mod.gambin_domain$aic)
+
+# What if we took elevation away now?
+mod.gambin_domainnoelev <- gam(borrPresent ~ s(dayOfYear) + #nlcdClass +
+                           s(dayOfYear,plotID, bs="re") + s(plotID, bs="re") + 
+                           s(year, bs="re") +# s(dayOfYear, year, bs="re") +
+                           # s(logNLtckDensity) + s(lognymphDensity) + s(logadultDensity) + s(logtckDensity) +
+                           s(domainID, bs="re") + s(domainID, dayOfYear, bs="re") +
+                           offset(log(numberTested))
+                         # , offset=log(numberTested) # I include the offset in the formula instead, so that it is included in predictions. Including it here does NOT incorporate numberTested in predictiosn.
+                         , data=tck_borrelia_adj
+                         , method="REML"
+                         , family=binomial)
+c(mod.gambin_nonlcdClass$aic - mod.gambin_domainnoelev$aic) # elevation still tells you stuff
+
+mod.gambin_fixedDomain <- gam(borrPresent ~ s(dayOfYear) + #nlcdClass +
+                               s(dayOfYear,plotID, bs="re") + s(plotID, bs="re") + 
+                               s(year, bs="re") +# s(dayOfYear, year, bs="re") +
+                               # s(logNLtckDensity) + s(lognymphDensity) + s(logadultDensity) + s(logtckDensity) +
+                               s(elevation) + domainID + 
+                               offset(log(numberTested))
+                             # , offset=log(numberTested) # I include the offset in the formula instead, so that it is included in predictions. Including it here does NOT incorporate numberTested in predictiosn.
+                             , data=tck_borrelia_adj
+                             , method="REML"
+                             , family=binomial)
+c(mod.gambin_withDomain$aic - mod.gambin_fixedDomain$aic)
+
+mod.gambin_fixeddomainnoelev <- gam(borrPresent ~ s(dayOfYear) + #nlcdClass +
+                                     s(dayOfYear,plotID, bs="re") + s(plotID, bs="re") + 
+                                     s(year, bs="re") +# s(dayOfYear, year, bs="re") +
+                                     # s(logNLtckDensity) + s(lognymphDensity) + s(logadultDensity) + s(logtckDensity) +
+                                     domainID +
+                                     offset(log(numberTested))
+                                   # , offset=log(numberTested) # I include the offset in the formula instead, so that it is included in predictions. Including it here does NOT incorporate numberTested in predictiosn.
+                                   , data=tck_borrelia_adj
+                                   , method="REML"
+                                   , family=binomial)
+c(mod.gambin_fixedDomain$aic, mod.gambin_fixeddomainnoelev$aic, mod.gambin_withDomain$aic)
+
+## FINAL MODEL:
+mod.gambin<- gam(borrPresent ~ s(dayOfYear)  +
+                                 s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") +
+                                 s(year, bs="re") + s(dayOfYear, year, bs="re") +
+                                 # s(elevation) +
+                                domainID +
+                                 offset(log(numberTested))
+                               # , offset=log(numberTested) # I include the offset in the formula instead, so that it is included in predictions. Including it here does NOT incorporate numberTested in predictiosn.
+                               , data=tck_borrelia_adj
+                               , method="REML"
+                               , family=binomial)
 gam.check(mod.gambin)
 summary(mod.gambin)
-mod.gambin$coefficients
 plot(mod.gambin, scale=0, pages=1)
-vis.gam(mod.gambin, view = c("logNLtckDensity","dayOfYear"), theta=-45)
+vis.gam(mod.gambin, view = c("elevation","dayOfYear"), theta=-45)
+vis.gam(mod.gambin, view = c("year","dayOfYear"), theta=-45)
+vis.gam(mod.gambin, view = c("plotID","dayOfYear"), theta=-45)
 
 # Get the "predicted" presence/absence of borrellia, and see how "correct" it was?
 plot(NULL,xlim=c(0,1),ylim=c(0,1), xlab=c("Probability Threshold"), ylab=c("Percentage Preditions correct"))
@@ -172,8 +386,8 @@ tck_borrelia_adj %>%
          , predictedPA = (predictedProbability>0.5)
          ,correctPredBin =((predictedProbability>0.5) == tck_borrelia_adj$borrPresent) ) %>%
   select(borrPresent,predictedPA) %>% table()
-11/(195+11) # False positive rate
-37/(65+37) # False negative rate
+16/(190+16) # False positive rate
+33/(69+33) # False negative rate
 # The false negative rate is actually a lot higher than the false positive rate. 
 # This means, on average, more samples are positive then you'd expect, given the model.
 
@@ -192,7 +406,7 @@ tck_borrelia_filtBin %>%
   select(borrPresent,predictedPA) %>% table()
 
 # Check if there is overdispersion
-test_glm_filt <- glm(numberPositive ~ factor(month) + nlcdClass + plotID + year
+test_glm_filt <- glm(numberPositive ~ factor(month) + elevation + plotID + year
                      , data=tck_borrelia_filtBin
                      , family="quasipoisson"
                      , offset = log(numberTested)
@@ -200,7 +414,7 @@ test_glm_filt <- glm(numberPositive ~ factor(month) + nlcdClass + plotID + year
 summary(test_glm_filt)
 
 # Try a regular poisson, and see how many zeros it finds
-test_glm_filt2 <- glm(numberPositive ~ factor(month) + nlcdClass + plotID + year
+test_glm_filt2 <- glm(numberPositive ~ factor(month) + elevation + plotID + year
                      , data=tck_borrelia_filtBin
                      , family="poisson"
                      , offset = log(numberTested)
@@ -214,7 +428,7 @@ sum(tck_borrelia_filtBin$numberPositive==0) # real number of zeros
 # Yes, there appears to be overdispersion... but the zero-inflation is not nearly as much!
 
 # Now try a negative binomial fit, and see how many zeros it predicts
-test_glm_filt3 <- glm(proportionPositive ~ factor(month) + nlcdClass + plotID + year
+test_glm_filt3 <- glm(proportionPositive ~ factor(month) + elevation + plotID + year
                       , data=tck_borrelia_filtBin
                       , family=negative.binomial(theta = 1) 
                       , offset = log(numberTested)
@@ -232,6 +446,133 @@ tck_borrelia_filtBin <- tck_borrelia_filtBin %>%
 
 
 #### Finally, the second GAM model for abundance ####
+
+# We should do the same model selection as above
+mod.gampois_all <- gam(numberPositive ~ offset(log(numberTested)) +  #Offset
+                      s(dayOfYear, sp=2)   + nlcdClass +# Main effects: day of year and nymph/adult tick density
+                      s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+                      s(year, bs="re") + s(year,dayOfYear, bs="re") + # Random effect of year
+                        s(elevation) +
+                        s(logtckDensity, sp=2) +s(logNLtckDensity, sp=2) 
+                    , data=tck_borrelia_filtBin
+                    , method="REML"
+                    , family="poisson")
+summary(mod.gampois_all)
+
+mod.gampois_notckdensity <- gam(numberPositive ~ offset(log(numberTested)) +  #Offset
+                         s(dayOfYear, sp=2)   + nlcdClass +# Main effects: day of year and nymph/adult tick density
+                         s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+                         s(year, bs="re") + s(year,dayOfYear, bs="re") + # Random effect of year
+                         s(elevation) 
+                         # s(logtckDensity, sp=2) +s(logNLtckDensity, sp=2) 
+                       , data=tck_borrelia_filtBin
+                       , method="REML"
+                       , family="poisson")
+c(mod.gampois_all$aic - mod.gampois_notckdensity$aic) # fit is WAY worse when no tck density.
+
+mod.gampois_withtckDensity <- gam(numberPositive ~ offset(log(numberTested)) +  #Offset
+                                  s(dayOfYear, sp=2)   + nlcdClass +# Main effects: day of year and nymph/adult tick density
+                                  s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+                                  s(year, bs="re") + s(year,dayOfYear, bs="re") + # Random effect of year
+                                  s(elevation) +
+                                s(logtckDensity, sp=2) #+s(logNLtckDensity, sp=2)
+                                , data=tck_borrelia_filtBin
+                                , method="REML"
+                                , family="poisson")
+mod.gampois_withNLDensity <- gam(numberPositive ~ offset(log(numberTested)) +  #Offset
+                                    s(dayOfYear, sp=2)   + nlcdClass +# Main effects: day of year and nymph/adult tick density
+                                    s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+                                    s(year, bs="re") + s(year,dayOfYear, bs="re") + # Random effect of year
+                                    s(elevation) +
+                                    s(logNLtckDensity, sp=2)
+                                  , data=tck_borrelia_filtBin
+                                  , method="REML"
+                                  , family="poisson")
+mod.gampois_withnymphDensity <- gam(numberPositive ~ offset(log(numberTested)) +  #Offset
+                                   s(dayOfYear, sp=2)   + nlcdClass +# Main effects: day of year and nymph/adult tick density
+                                   s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+                                   s(year, bs="re") + s(year,dayOfYear, bs="re") + # Random effect of year
+                                   s(elevation) +
+                                   s(lognymphDensity, sp=2)
+                                 , data=tck_borrelia_filtBin
+                                 , method="REML"
+                                 , family="poisson")
+c(mod.gampois_withtckDensity$aic - mod.gampois_notckdensity$aic)  
+c(mod.gampois_withNLDensity$aic - mod.gampois_notckdensity$aic) # exact same effect as total tck density; keep NLtckdensity
+c(mod.gampois_withnymphDensity$aic - mod.gampois_notckdensity$aic) 
+
+mod.gampois_noelevation <- gam(numberPositive ~ offset(log(numberTested)) +  #Offset
+                                      s(dayOfYear, sp=2)   + nlcdClass +# Main effects: day of year and nymph/adult tick density
+                                      s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+                                      s(year, bs="re") + s(year,dayOfYear, bs="re") + # Random effect of year
+                                      # s(elevation) +
+                                      s(logNLtckDensity, sp=2)
+                                    , data=tck_borrelia_filtBin
+                                    , method="REML"
+                                    , family="poisson")
+c(mod.gampois_withNLDensity$aic - mod.gampois_noelevation$aic)  # slightly better fit without elevation; can remove.
+
+mod.gampois_noyear <- gam(numberPositive ~ offset(log(numberTested)) +  #Offset
+                                 s(dayOfYear, sp=2)   + nlcdClass +# Main effects: day of year and nymph/adult tick density
+                                 s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+                                 # s(year, bs="re") + s(year,dayOfYear, bs="re") + # Random effect of year
+                                 # s(elevation) +
+                                 s(logNLtckDensity, sp=2)
+                               , data=tck_borrelia_filtBin
+                               , method="REML"
+                               , family="poisson")
+c(mod.gampois_noelevation$aic - mod.gampois_noyear$aic) # need year
+
+mod.gampois_noplot <- gam(numberPositive ~ offset(log(numberTested)) +  #Offset
+                            s(dayOfYear, sp=2)   + nlcdClass +# Main effects: day of year and nymph/adult tick density
+                            # s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+                            s(year, bs="re") + s(year,dayOfYear, bs="re") + # Random effect of year
+                            # s(elevation) +
+                            s(logNLtckDensity, sp=2)
+                          , data=tck_borrelia_filtBin
+                          , method="REML"
+                          , family="poisson")
+c(mod.gampois_noelevation$aic - mod.gampois_noplot$aic) # need plot
+
+mod.gampois_nonlcdClass <- gam(numberPositive ~ offset(log(numberTested)) +  #Offset
+                            s(dayOfYear, sp=2)   +# nlcdClass +# Main effects: day of year and nymph/adult tick density
+                            s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+                            s(year, bs="re") + s(year,dayOfYear, bs="re") + # Random effect of year
+                            # s(elevation) +
+                            s(logNLtckDensity, sp=2)
+                          , data=tck_borrelia_filtBin
+                          , method="REML"
+                          , family="poisson")
+c(mod.gampois_noelevation$aic - mod.gampois_nonlcdClass$aic) # need nlcdClass
+
+mod.gampois_nodayOfYear<- gam(numberPositive ~ offset(log(numberTested)) +  #Offset
+                                 # s(dayOfYear, sp=2)   +
+                                 nlcdClass +# Main effects: day of year and nymph/adult tick density
+                                 s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+                                 s(year, bs="re") + s(year,dayOfYear, bs="re") + # Random effect of year
+                                 # s(elevation) +
+                                 s(logNLtckDensity, sp=2)
+                               , data=tck_borrelia_filtBin
+                               , method="REML"
+                               , family="poisson")
+c(mod.gampois_noelevation$aic - mod.gampois_nodayOfYear$aic) # need dayOfYear
+
+# Best fit model sofar:
+summary(mod.gampois_noelevation)
+# Do we need year (no interaction)?
+mod.gampois_noyearalone<- gam(numberPositive ~ offset(log(numberTested)) +  #Offset
+                                s(dayOfYear, sp=2)+nlcdClass +# Main effects: day of year and nymph/adult tick density
+                                s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+                                s(year,dayOfYear, bs="re") + # Random effect of year
+                                # s(elevation) +
+                                s(logNLtckDensity, sp=2)
+                              , data=tck_borrelia_filtBin
+                              , method="REML"
+                              , family="poisson")
+c(mod.gampois_noelevation$aic - mod.gampois_noyearalone$aic)  #no; better if included.
+
+#### FINAL MODEL:
+
 mod.gam_pois <- gam(numberPositive ~ offset(log(numberTested)) +  #Offset
                   s(dayOfYear, sp=2) + s(logNLtckDensity, sp=2)  + nlcdClass +# Main effects: day of year and nymph/adult tick density
                   s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
@@ -249,143 +590,272 @@ vis.gam(mod.gam_pois, view = c("logNLtckDensity","dayOfYear"), theta=45)
 plot(tck_borrelia_filtBin$proportionPositive ~ tck_borrelia_filtBin$logNLtckDensity)
 plot(tck_borrelia_filtBin$proportionPositive ~ tck_borrelia_filtBin$dayOfYear)
 
-## The poisson model's residuals are wonky, and we've already established that there is likely over-dispersion. 
-# Therefore, let's fit a quasipoisson to see if this improves residual distribution.
 
-mod.gam_qpois <- gam(numberPositive ~ offset(log(numberTested)) +  #Offset
-                      s(dayOfYear, sp=1) + s(logNLtckDensity, sp=1)  + nlcdClass +# Main effects: day of year and nymph/adult tick density
-                      s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
-                      s(year, bs="re") + s(year,dayOfYear, bs="re") # Random effect of year
-                    , data=tck_borrelia_filtBin
-                    , method="REML"
-                    , family="quasipoisson")
-gam.check(mod.gam_qpois)
-summary(mod.gam_qpois)
-plot(mod.gam_qpois, pages=1, scale=0)
-plot(mod.gam_qpois$residuals ~ mod.gam_qpois$fitted.values, ylim=c(-max(abs(mod.gam_qpois$residuals)),max(abs(mod.gam_qpois$residuals)) ))
-plot(mod.gam_qpois$residuals ~ mod.gam_qpois$fitted.values, ylim=c(-2,2) )
-# residuals look sort of wonky still-- and not symmetric...
-vis.gam(mod.gam_qpois, view = c("logNLtckDensity","dayOfYear"), theta=45)
+### Try the whole model section process again with a binomial
+mod.gambin2_all <- gam(cbind(numberPositive,numberTested) ~ #offset(log(numberTested)) +  #Offset
+                         s(dayOfYear, sp=2)   + nlcdClass +# Main effects: day of year and nymph/adult tick density
+                         s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+                         s(year, bs="re") + s(year,dayOfYear, bs="re") + # Random effect of year
+                         s(elevation) + domainID +
+                         s(logtckDensity, sp=1) +s(logNLtckDensity, sp=1) 
+                       , data=tck_borrelia_filtBin
+                       , method="REML"
+                       , family=binomial)
+summary(mod.gambin2_all)
 
+mod.gambin2_nodensity <- gam(cbind(numberPositive,numberTested) ~ #offset(log(numberTested)) +  #Offset
+                         s(dayOfYear, sp=2)   + nlcdClass +# Main effects: day of year and nymph/adult tick density
+                         s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+                         s(year, bs="re") + s(year,dayOfYear, bs="re") + # Random effect of year
+                         s(elevation) +domainID
+                         # s(logtckDensity, sp=2) +s(logNLtckDensity, sp=2) 
+                       , data=tck_borrelia_filtBin
+                       , method="REML"
+                       , family=binomial)
+c(mod.gambin2_nodensity$aic, mod.gambin2_all$aic) # need density
+mod.gambin2_logtckdensity <- gam(cbind(numberPositive,numberTested) ~ #offset(log(numberTested)) +  #Offset
+                               s(dayOfYear, sp=2)   + nlcdClass +# Main effects: day of year and nymph/adult tick density
+                               s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+                               s(year, bs="re") + s(year,dayOfYear, bs="re") + # Random effect of year
+                               s(elevation) +domainID +
+                             s(logtckDensity, sp=1) 
+                             , data=tck_borrelia_filtBin
+                             , method="REML"
+                             , family=binomial)
+mod.gambin2_logNLdensity <- gam(cbind(numberPositive,numberTested) ~ #offset(log(numberTested)) +  #Offset
+                                   s(dayOfYear, sp=2)   + nlcdClass +# Main effects: day of year and nymph/adult tick density
+                                   s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+                                   s(year, bs="re") + s(year,dayOfYear, bs="re") + # Random effect of year
+                                   s(elevation) +domainID +
+                                 s(logNLtckDensity, sp=1) 
+                                 , data=tck_borrelia_filtBin
+                                 , method="REML"
+                                 , family=binomial)
+c(mod.gambin2_all$aic, mod.gambin2_logNLdensity$aic, mod.gambin2_logtckdensity$aic)
+plot(mod.gambin2_logNLdensity, select=7)
+plot(mod.gambin2_logtckdensity, select=7)
 
-## Last option: a negative binomial.
-mod.gam_nb <- gam(proportionPositive ~ offset(log(numberTested)) +  #Offset
-                       s(dayOfYear) + s(logNLtckDensity)  + nlcdClass +# Main effects: day of year and nymph/adult tick density
-                       s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
-                       s(year, bs="re") + s(year,dayOfYear, bs="re") # Random effect of year
-                     , data=tck_borrelia_filtBin
-                     , method="REML"
-                     , family=nb)
-gam.check(mod.gam_nb)
-summary(mod.gam_nb)
-plot(mod.gam_nb, pages=1, scale=0)
-plot(mod.gam_nb$residuals ~ mod.gam_nb$fitted.values, ylim=c(-max(abs(mod.gam_nb$residuals)),max(abs(mod.gam_nb$residuals)) ))
-plot(mod.gam_nb$residuals ~ mod.gam_nb$fitted.values, ylim=c(-10,10) )
-# There are a few residuals that look really bad, but the rest of them actually look pretty normally distributed. 
-# Errors are always in lower proportions of residuals. Is this a symptom of small testing size or number of positives?
-plot(mod.gam_nb$residuals ~ log(tck_borrelia_filtBin$numberTested)) # Nope, not really an effect of testing size
-plot(mod.gam_nb$residuals ~ log(tck_borrelia_filtBin$numberPositive)) # Nope, not really an effect of numberPositive
-plot(mod.gam_nb$residuals ~ tck_borrelia_filtBin$proportionPositive) # Nope, not really an effect of testing size
-# There are three points that stand out-- let's see what they are.
-y <- mod.gam_nb$residuals
-x <-  mod.gam_nb$fitted.values
-plot(y ~ x)
-# identify(y ~ x, plot=TRUE) ##26, 47, 55, 90, 102, 110
-tck_borrelia_filtBin[c(102, 47, 110, 26,  55, 90),c("plotID","numberTested","numberPositive","proportionPositive")]
+# Let's just keep NLdensity?
 
-# Also, let's look at residuals of predicted proportions.
-predicted_nb <- predict(mod.gam_nb, type="response")
-plot(predicted_nb~tck_borrelia_filtBin$proportionPositive)
-res.manual <- (tck_borrelia_filtBin$proportionPositive-predicted_nb)
-plot(res.manual ~ predicted_nb)
-plot(res.manual ~ tck_borrelia_filtBin$proportionPositive)
-vis.gam(mod.gam_nb, view = c("logNLtckDensity","dayOfYear"), theta=45)
+mod.gambin2_noelevation <- gam(cbind(numberPositive,numberTested) ~ #offset(log(numberTested)) +  #Offset
+                               s(dayOfYear, sp=2)   + nlcdClass +# Main effects: day of year and nymph/adult tick density
+                               s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+                               s(year, bs="re") + s(year,dayOfYear, bs="re") + # Random effect of year
+                                 domainID +# s(elevation) + 
+                             s(logNLtckDensity, sp=1)
+                             , data=tck_borrelia_filtBin
+                             , method="REML"
+                             , family=binomial)
+c(mod.gambin2_noelevation$aic, mod.gambin2_logNLdensity$aic) #  better with elev; should keep
 
-# Let's see what happens if we try to predict number positive
-pred.numberPositive <- mod.gam_nb$fitted.values*tck_borrelia_filtBin$numberTested
-plot(log(pred.numberPositive+1) ~ log(tck_borrelia_filtBin$numberPositive+1))
-abline(a=0,b=1)
+mod.gambin2_noyear <- gam(cbind(numberPositive,numberTested) ~ #offset(log(numberTested)) +  #Offset
+                                 s(dayOfYear, sp=2)   + nlcdClass +# Main effects: day of year and nymph/adult tick density
+                                 s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+                                 # s(year, bs="re") + s(year,dayOfYear, bs="re") + # Random effect of year
+                                 s(elevation) + domainID +
+                                 s(logNLtckDensity, sp=1)
+                               , data=tck_borrelia_filtBin
+                               , method="REML"
+                               , family=binomial)
+c(mod.gambin2_logNLdensity$aic, mod.gambin2_noyear$aic) # better with year
 
+mod.gambin2_noplot <- gam(cbind(numberPositive,numberTested) ~ #offset(log(numberTested)) +  #Offset
+                            s(dayOfYear, sp=2)   + nlcdClass +# Main effects: day of year and nymph/adult tick density
+                            # s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+                            s(year, bs="re") + s(year,dayOfYear, bs="re") + # Random effect of year
+                            s(elevation) + domainID +
+                            s(logNLtckDensity, sp=1)
+                          , data=tck_borrelia_filtBin
+                          , method="REML"
+                          , family=binomial)
+c(mod.gambin2_logNLdensity$aic, mod.gambin2_noplot$aic) # better with plot
 
+mod.gambin2_nonlcdClass <- gam(cbind(numberPositive,numberTested) ~ #offset(log(numberTested)) +  #Offset
+                            s(dayOfYear, sp=2)   + #nlcdClass +# Main effects: day of year and nymph/adult tick density
+                            s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+                            s(year, bs="re") + s(year,dayOfYear, bs="re") + # Random effect of year
+                            s(elevation) + domainID +
+                            s(logNLtckDensity, sp=1)
+                          , data=tck_borrelia_filtBin
+                          , method="REML"
+                          , family=binomial)
+c(mod.gambin2_logNLdensity$aic, mod.gambin2_nonlcdClass$aic) # nlcd Class improves a bit
 
-#### GAM on non-zero counts ####
-# Filter to only non-zeros
-tck_borrelia_nozeros <- tck_borrelia_adj %>%
-  filter(numberPositive>0) %>%
-  mutate(year=factor(year))
+mod.gambin2_nodayofyear <- gam(cbind(numberPositive,numberTested) ~ #offset(log(numberTested)) +  #Offset
+                                 # s(dayOfYear, sp=2)   + 
+                                 nlcdClass +# Main effects: day of year and nymph/adult tick density
+                                 s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+                                 s(year, bs="re") + s(year,dayOfYear, bs="re") + # Random effect of year
+                                 s(elevation) + domainID +
+                                 s(logNLtckDensity, sp=1)
+                               , data=tck_borrelia_filtBin
+                               , method="REML"
+                               , family=binomial)
+c(mod.gambin2_logNLdensity$aic, mod.gambin2_nodayofyear$aic) # better with dayofyear
 
-mod.gam_pois_nozeros <- gam(numberPositive ~ offset(log(numberTested)) +  #Offset
-                      s(dayOfYear, sp=2) + s(logNLtckDensity, sp=1)  + nlcdClass +# Main effects: day of year and nymph/adult tick density
-                      s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
-                      s(year, bs="re") + s(year,dayOfYear, bs="re") # Random effect of year
-                    , data=tck_borrelia_nozeros
-                    , method="REML"
-                    , family="poisson")
-gam.check(mod.gam_pois_nozeros)
-summary(mod.gam_pois_nozeros)
-plot(mod.gam_pois_nozeros, pages=1, scale=0)
-plot(mod.gam_pois_nozeros$residuals ~ mod.gam_pois_nozeros$fitted.values, ylim=c(-max(abs(mod.gam_pois_nozeros$residuals)),max(abs(mod.gam_pois_nozeros$residuals)) ))
-# residuals look sort of wonky
-vis.gam(mod.gam_pois_nozeros, view = c("logNLtckDensity","dayOfYear"), theta=45)
-# sanity check to see that this relationship actually makes sense
-plot(tck_borrelia_nozeros$proportionPositive ~ tck_borrelia_nozeros$logNLtckDensity)
-plot(tck_borrelia_nozeros$proportionPositive ~ tck_borrelia_nozeros$dayOfYear)
+mod.gambin2_nodomain <- gam(cbind(numberPositive,numberTested) ~ #offset(log(numberTested)) +  #Offset
+                                 # s(dayOfYear, sp=2)   + 
+                                 nlcdClass +# Main effects: day of year and nymph/adult tick density
+                                 s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+                                 s(year, bs="re") + s(year,dayOfYear, bs="re") + # Random effect of year
+                                 s(elevation) + domainID +
+                                 s(logNLtckDensity, sp=1)
+                               , data=tck_borrelia_filtBin
+                               , method="REML"
+                               , family=binomial)
+c(mod.gambin2_logNLdensity$aic, mod.gambin2_nodayofyear$aic) # better with dayofyear
 
-## The poisson model's residuals are wonky, and we've already established that there is likely over-dispersion. 
-# Therefore, let's fit a quasipoisson to see if this improves residual distribution.
+### BEST MODEL:
+mod.gambin_2 <- gam(cbind(numberPositive,numberTested) ~ #offset(log(numberTested)) +  #Offset
+                                 s(dayOfYear, sp=2)   +
+                                 nlcdClass +# Main effects: day of year and nymph/adult tick density
+                                 s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+                                 s(year, bs="re") + s(year,dayOfYear, bs="re") + # Random effect of year
+                                 s(elevation) + domainID +s(logNLtckDensity, sp=1)
+                               , data=tck_borrelia_filtBin
+                               , method="REML"
+                               , family=binomial)
+gam.check(mod.gambin_2)
+summary(mod.gambin_2)
+plot(mod.gambin_2, pages=1)
+vis.gam(mod.gambin_2, view = c("dayOfYear","logNLtckDensity"), theta=45)
+vis.gam(mod.gambin_2, view = c("dayOfYear","elevation"), theta=45)
 
-mod.gam_qpois_nozeros <- gam(numberPositive ~ offset(log(numberTested)) +  #Offset
-                       s(dayOfYear, sp=2) + s(logNLtckDensity, sp=1)  + nlcdClass +# Main effects: day of year and nymph/adult tick density
-                       s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
-                       s(year, bs="re") + s(year,dayOfYear, bs="re") # Random effect of year
-                     , data=tck_borrelia_nozeros
-                     , method="REML"
-                     , family="quasipoisson")
-gam.check(mod.gam_qpois_nozeros)
-summary(mod.gam_qpois_nozeros)
-plot(mod.gam_qpois_nozeros, pages=1, scale=0)
-plot(mod.gam_qpois_nozeros$residuals ~ mod.gam_qpois_nozeros$fitted.values, ylim=c(-max(abs(mod.gam_qpois_nozeros$residuals)),max(abs(mod.gam_qpois_nozeros$residuals)) ))
-plot(mod.gam_qpois_nozeros$residuals ~ mod.gam_qpois_nozeros$fitted.values, ylim=c(-2,2) )
-# residuals look sort of wonky still-- and not symmetric...
-vis.gam(mod.gam_qpois_nozeros, view = c("logNLtckDensity","dayOfYear"), theta=45)
-
-
-## Last option: a negative binomial.
-mod.gam_nb_nozeros <- gam(proportionPositive ~ offset(log(numberTested)) +  #Offset
-                    s(dayOfYear) + s(logNLtckDensity)  + nlcdClass +# Main effects: day of year and nymph/adult tick density
-                    s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
-                    s(year, bs="re") + s(year,dayOfYear, bs="re") # Random effect of year
-                  , data=tck_borrelia_nozeros
-                  , method="REML"
-                  , family=nb)
-gam.check(mod.gam_nb_nozeros)
-summary(mod.gam_nb_nozeros)
-plot(mod.gam_nb_nozeros, pages=1, scale=0)
-plot(mod.gam_nb_nozeros$residuals ~ mod.gam_nb_nozeros$fitted.values, ylim=c(-max(abs(mod.gam_nb_nozeros$residuals)),max(abs(mod.gam_nb_nozeros$residuals)) ))
-plot(mod.gam_nb_nozeros$residuals ~ mod.gam_nb_nozeros$fitted.values, ylim=c(-2,2) )
-# residuals look sort of wonky still-- and not symmetric...
-vis.gam(mod.gam_nb_nozeros, view = c("logNLtckDensity","dayOfYear"), theta=45)
-
+# 
+# #### GAM on non-zero counts ####
+# # Filter to only non-zeros
+# tck_borrelia_nozeros <- tck_borrelia_adj %>%
+#   filter(numberPositive>0) %>%
+#   mutate(year=factor(year))
+# 
+# mod.gam_pois_nozeros <- gam(numberPositive ~ offset(log(numberTested)) +  #Offset
+#                       s(dayOfYear, sp=2) + s(logNLtckDensity, sp=1)  + nlcdClass +# Main effects: day of year and nymph/adult tick density
+#                       s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+#                       s(year, bs="re") + s(year,dayOfYear, bs="re") # Random effect of year
+#                     , data=tck_borrelia_nozeros
+#                     , method="REML"
+#                     , family="poisson")
+# gam.check(mod.gam_pois_nozeros)
+# summary(mod.gam_pois_nozeros)
+# plot(mod.gam_pois_nozeros, pages=1, scale=0)
+# plot(mod.gam_pois_nozeros$residuals ~ mod.gam_pois_nozeros$fitted.values, ylim=c(-max(abs(mod.gam_pois_nozeros$residuals)),max(abs(mod.gam_pois_nozeros$residuals)) ))
+# # residuals look sort of wonky
+# vis.gam(mod.gam_pois_nozeros, view = c("logNLtckDensity","dayOfYear"), theta=45)
+# # sanity check to see that this relationship actually makes sense
+# plot(tck_borrelia_nozeros$proportionPositive ~ tck_borrelia_nozeros$logNLtckDensity)
+# plot(tck_borrelia_nozeros$proportionPositive ~ tck_borrelia_nozeros$dayOfYear)
+# 
+# ## The poisson model's residuals are wonky, and we've already established that there is likely over-dispersion. 
+# # Therefore, let's fit a quasipoisson to see if this improves residual distribution.
+# 
+# mod.gam_qpois_nozeros <- gam(numberPositive ~ offset(log(numberTested)) +  #Offset
+#                        s(dayOfYear, sp=2) + s(logNLtckDensity, sp=1)  + nlcdClass +# Main effects: day of year and nymph/adult tick density
+#                        s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+#                        s(year, bs="re") + s(year,dayOfYear, bs="re") # Random effect of year
+#                      , data=tck_borrelia_nozeros
+#                      , method="REML"
+#                      , family="quasipoisson")
+# gam.check(mod.gam_qpois_nozeros)
+# summary(mod.gam_qpois_nozeros)
+# plot(mod.gam_qpois_nozeros, pages=1, scale=0)
+# plot(mod.gam_qpois_nozeros$residuals ~ mod.gam_qpois_nozeros$fitted.values, ylim=c(-max(abs(mod.gam_qpois_nozeros$residuals)),max(abs(mod.gam_qpois_nozeros$residuals)) ))
+# plot(mod.gam_qpois_nozeros$residuals ~ mod.gam_qpois_nozeros$fitted.values, ylim=c(-2,2) )
+# # residuals look sort of wonky still-- and not symmetric...
+# vis.gam(mod.gam_qpois_nozeros, view = c("logNLtckDensity","dayOfYear"), theta=45)
+# 
+# 
+# ## Last option: a negative binomial.
+# mod.gam_nb_nozeros <- gam(proportionPositive ~ offset(log(numberTested)) +  #Offset
+#                     s(dayOfYear) + s(logNLtckDensity)  + nlcdClass +# Main effects: day of year and nymph/adult tick density
+#                     s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+#                     s(year, bs="re") + s(year,dayOfYear, bs="re") # Random effect of year
+#                   , data=tck_borrelia_nozeros
+#                   , method="REML"
+#                   , family=nb)
+# gam.check(mod.gam_nb_nozeros)
+# summary(mod.gam_nb_nozeros)
+# plot(mod.gam_nb_nozeros, pages=1, scale=0)
+# plot(mod.gam_nb_nozeros$residuals ~ mod.gam_nb_nozeros$fitted.values, ylim=c(-max(abs(mod.gam_nb_nozeros$residuals)),max(abs(mod.gam_nb_nozeros$residuals)) ))
+# plot(mod.gam_nb_nozeros$residuals ~ mod.gam_nb_nozeros$fitted.values, ylim=c(-2,2) )
+# # residuals look sort of wonky still-- and not symmetric...
+# vis.gam(mod.gam_nb_nozeros, view = c("logNLtckDensity","dayOfYear"), theta=45)
+# 
 
 #### Can I use this in brms? ####
 library("brms")
 
+##### STOP HERE #####
+#### TESTING BRMS AND GAMs #####
+get_prior(bf(borrPresent ~ s(dayOfYear)  +
+               s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") +
+               s(year, bs="re") + s(dayOfYear, year, bs="re") +
+               s(elevation) + domainID +
+               offset(log(numberTested)))
+             , data=tck_borrelia_adj
+             , family=bernoulli
+)
+# 
+# mod.brm_test1 <- brm(bf(borrPresent ~ s(dayOfYear)  +
+#                           s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") +
+#                           s(year, bs="re") + s(dayOfYear, year, bs="re") +
+#                           s(elevation) +
+#                           offset(log(numberTested)))
+#           , data=tck_borrelia_adj
+#           , family=bernoulli
+# )
+# summary(mod.brm_test1)
+# plot(mod.brm_test1)
+# conditional_smooths(mod.brm_test1, smooths = "s(dayOfYear)")
+# conditional_smooths(mod.brm_test1, smooths = "s(elevation)")
+
+
 # Hurdle component
+# Let's use the best model from regular GAMs
+summary(mod.gambin)
+gambin_priors <- c(prior(student_t(3,-1.7, 5), class="Intercept" )
+                   ,prior(normal(-1.21, 5), class="b", coef="domainIDD02" )
+                   ,prior(normal(-5.86, 5), class="b", coef="domainIDD03" )
+                   ,prior(normal(-1.27, 5), class="b", coef="domainIDD05" )
+                   ,prior(normal(-6.14, 5), class="b", coef="domainIDD06" )
+                   ,prior(normal(-5.70, 5), class="b", coef="domainIDD07" )
+                   ,prior(normal(-6.35, 5), class="b", coef="domainIDD08" )
+                   ,prior(normal(2.98, 5), class="b", coef="sdayOfYear_1" )
+                   ,prior(normal(7.85, 5), class="b", coef="selevation_1" )
+)
+
 if (FALSE ) {
-  brm_bin <- brm(bf(borrPresent ~ s(dayOfYear) + nlcdClass + s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + s(logNLtckDensity) + offset(log(numberTested)))
-                 # , offset=log(numberTested) # I include the offset in the formula instead, so that it is included in predictions. Including it here does NOT incorporate numberTested in predictiosn.
+  brm_bin <- brm(bf(borrPresent ~ s(dayOfYear)  +
+                      s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") +
+                      s(year, bs="re") + s(dayOfYear, year, bs="re") +
+                      s(elevation) + domainID +
+                      offset(log(numberTested)))
+                 , seed=48
                  , data=tck_borrelia_adj
-                 , seed=92834
                  , family=bernoulli
-                 , control=list(adapt_delta=0.999))
+                 , prior = gambin_priors
+                 , control=list(adapt_delta=0.99, max_treedepth=15)
+                 )
+  # brm_bin_withDomain <- brm(bf(borrPresent ~ s(dayOfYear)  +nlcdClass +
+  #                     s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") +
+  #                     s(year, bs="re") + s(dayOfYear, year, bs="re") +
+  #                     s(elevation) +s(domainID, bs="re") +
+  #                     offset(log(numberTested)))
+  #                , seed=48
+  #                , data=tck_borrelia_adj
+  #                , family=bernoulli)
+
   save(brm_bin, file="brm_bin.RData")
+  # save(brm_bin_noelev, file="brm_bin_noelev.RData")
+  
 } else {
   load("brm_bin.RData")
+  # load("brm_bin_noelev.RData")
 }
 
 summary(brm_bin)
-fixef(brm_bin)
-stanfit_bin <- rstan::extract(brm_bin$fit)
+conditional_effects(brm_bin, effects = "dayOfYear")
+conditional_effects(brm_bin, effects = "elevation") # elevation effect super weird
+
 pp_check(brm_bin, nsamples = 100)
 pp_check(brm_bin, type = "ecdf_overlay")
 
@@ -400,7 +870,7 @@ predict(brm_bin) %>%
   mutate(Pred = ifelse(Estimate>0.5, 1, 0)) %>%
   select(borrPresent, Pred) %>% table()
 11/(11+195) # false positive rate
-38/(38+64) # false negative rate
+29/(29+73) # false negative rate
 
 # See if there is correlation between probability and how many positives there actually were
 fitted(brm_bin) %>%
@@ -411,14 +881,16 @@ fitted(brm_bin) %>%
 # Effect of day of year
 fitted(brm_bin) %>%
   cbind(brm_bin$data) %>%
-  ggplot() + geom_point(aes(x=dayOfYear, y=Estimate)) + geom_point(aes(x=dayOfYear, y=borrPresent), col="red",alpha=0.2) + geom_smooth(aes(x=dayOfYear, y=borrPresent))
+  left_join(tck_borrelia_adj) %>%
+  ggplot() + geom_point(aes(x=dayOfYear, y=Estimate, col=nlcdClass)) + geom_point(aes(x=dayOfYear, y=borrPresent), col="red",alpha=0.2) + geom_smooth(aes(x=dayOfYear, y=borrPresent))
 conditional_smooths(brm_bin, smooths="s(dayOfYear)")
 
 # Effect of tck density
 fitted(brm_bin) %>%
   cbind(brm_bin$data) %>%
-  ggplot() + geom_point(aes(x=logNLtckDensity, y=Estimate)) + geom_point(aes(x=logNLtckDensity, y=borrPresent), col="red",alpha=0.2) + geom_smooth(aes(x=logNLtckDensity, y=borrPresent)) 
-conditional_smooths(brm_bin, smooths="s(logNLtckDensity)")
+  left_join(tck_borrelia_adj) %>%
+  ggplot() + geom_point(aes(x=elevation, y=Estimate, col=domainID)) + geom_point(aes(x=elevation, y=borrPresent), col="red",alpha=0.2) + geom_smooth(aes(x=elevation, y=borrPresent)) 
+conditional_smooths(brm_bin, smooths="s(elevation)")
 
 # Since each sample is IID, we can include all positive results in poisson component of model, and use fitted probabilities to determine
 # whether each zero is a "binomial" zero or a "poisson" zero.
@@ -433,14 +905,56 @@ tck_borrelia_filtbin_brm %>%
 tck_borrelia_filtbin_brm %>%
   ggplot() + geom_histogram(aes(x=numberPositive), bins=20)
 
+### Binomial
+brm_bin2 <- brm(bf(numberPositive | trials(numberTested) ~ #offset(log(numberTested)) +  #Offset
+      s(dayOfYear)   +
+      nlcdClass + # Main effects: day of year and nymph/adult tick density
+      s(plotID, bs="re") + s(dayOfYear,plotID, bs="re") + # Random Effect of plot
+      s(year, bs="re") + s(year,dayOfYear, bs="re") + # Random effect of year
+      s(logNLtckDensity))
+    , data=tck_borrelia_filtbin_brm
+    , family=binomial()
+    , seed=24
+)
+
+summary(brm_bin2)
+plot(brm_bin2)
+conditional_smooths(brm_bin2)
+plot()
+summary(mod.gambin_2)
+
+
 ## POISSON
-brm_pois <- brm(numberPositive ~ offset(log(numberTested)) +  #Offset
-                  s(dayOfYear) + s(logNLtckDensity)  + nlcdClass +# Main effects: day of year and nymph/adult tick density
-                  s(plotID, bs="re") +# Random Effect of plot
-                  s(year, bs="re") # Random effect of year
+# cbind with binomial; also, re-center
+tck_borrelia_filtbin_brm <- tck_borrelia_filtbin_brm %>%
+  mutate(dayOfYear_cen = (dayOfYear-mean(dayOfYear)/sd(dayOfYear))
+         , logNLtckDensity_cen = (logNLtckDensity-mean(logNLtckDensity)/sd(logNLtckDensity))
+         , logadultDensity_cen = (logadultDensity-mean(logadultDensity)/sd(logadultDensity))
+         , lognymphDensity_cen = (lognymphDensity-mean(lognymphDensity)/sd(lognymphDensity))
+         , year=factor(year))
+brm_bin2 <- brm(numberPositive | trials(numberTested) ~ 
+                  s(dayOfYear_cen) + s(logNLtckDensity_cen)  + nlcdClass +# Main effects: day of year and nymph/adult tick density
+                  s(plotID, bs="re") + s(dayOfYear_cen,plotID, bs="re") + # Random Effect of plot
+                  s(year, bs="re") + s(year,dayOfYear_cen, bs="re") # Random effect of year
                 , data=tck_borrelia_filtbin_brm
-                , family=poisson
+                , family=binomial()
+                , control = list(adapt_delta=0.99, max_treedepth=15)
                 )
+# try setting priors to limit how wiggly things can be-- might help with convergence
+# play around with wigglyness in GAM and then set into brm
+summary(brm_bin2)
+conditional_smooths(brm_bin2)
+
+conditional_smooths(brm_bin2, smooths="s(dayOfYear_cen)")
+conditional_smooths(brm_bin2, smooths="s(logNLtckDensity_cen)")
+posterior_predict()
+
+predict(brm_bin2) %>%
+  cbind(tck_borrelia_filtbin_brm[,c("numberPositive","dayOfYear","numberTested","logNLtckDensity","year","plotID")]) %>%
+  ggplot() + geom_point(aes(x=log(numberPositive+1), y=log(Estimate+1))) +
+  geom_segment(aes(x=log(numberPositive+1), xend=log(numberPositive+1), y=log(Q2.5+1), yend=log(Q97.5+1)), col="red")
+
+
 
 brm_pois <- brm(numberPositive ~ offset(log(numberTested)) +  #Offset
                   s(dayOfYear) + s(logNLtckDensity)  + nlcdClass +# Main effects: day of year and nymph/adult tick density
@@ -448,7 +962,10 @@ brm_pois <- brm(numberPositive ~ offset(log(numberTested)) +  #Offset
                   s(year, bs="re") + s(year,dayOfYear, bs="re") # Random effect of year
                 , data=tck_borrelia_filtbin_brm
                 , family=poisson
-                , control = list(adapt_delta=0.95))
+                , control = list(adapt_delta=0.99, max_treedepth=15))
+save(brm_pois, file="brms_pois.RData")
+pp_check(brm_pois)
+
 predict(brm_pois) %>%
   cbind(tck_borrelia_filtbin_brm[,c("numberPositive","dayOfYear","numberTested","logNLtckDensity","year","plotID")]) %>%
   ggplot() + geom_point(aes(x=log(numberPositive+1), y=log(Estimate+1))) +
@@ -456,7 +973,6 @@ predict(brm_pois) %>%
 
 
 
-### STOP HERE ####
 # Trying to figure out how tin incorporate uncertainty into predictions (of number tested) and also
 # trying to figure out which samples to keep vs discard for post-hurdle component of model
 
