@@ -47,7 +47,7 @@ vignettes/*.pdf
 data_raw/filesToStack10093
 data_raw/filesToStack10092
 data_derived/
-
+output/EDA_plots
 # Don't download or upload anything containing MYC-- this is my working stuff
 *MYC.R
 
@@ -62,5 +62,11 @@ machineLearnSpace.RData
 About_GAMs.Rmd
 time_series_play.R
 data_raw/csale.rds
-data_raw/new_credit_ddata.rds
-TickTimeSeries_pois
+data_raw/new_credit_data.rds
+TickTimeSeries_pois.Rmd
+Time_Series_Tutorials*
+tick_time_series.R
+TickTimeSeries_03*
+
+# Don't upload my bad scratch stuff
+scratch
