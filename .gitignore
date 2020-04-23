@@ -47,6 +47,8 @@ vignettes/*.pdf
 data_raw/filesToStack10093
 data_raw/filesToStack10092
 data_derived/
+!data_derived/nymph_abun_all.Rdata
+!data_derived/nymph_abun_test.Rdata
 output/EDA_plots
 # Don't download or upload anything containing MYC-- this is my working stuff
 *MYC.R
