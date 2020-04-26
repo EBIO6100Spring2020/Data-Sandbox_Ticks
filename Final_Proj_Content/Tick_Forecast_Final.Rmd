@@ -1,0 +1,314 @@
+---
+title: "Tick Abundance and Borrelia Prevalence Forecasting"
+author: "M.Y. Chen, W.E. Moss, B.K. Hobart, M.E. Bitters"
+date: "4/26/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load libraries
+```{r}
+library(dplyr)
+library(tidyverse)
+library(forcats)
+library(lubridate)
+library(ggthemes)  # for a mapping theme
+library(ggalt)  # for custom map projections
+library(viridis)
+library(ggrepel)  # for annotations
+library(png)
+library(jpeg)
+```
+
+
+Basic Outline: (feel free to delete once filled in)
+
+### Scientific Background of Ixodes scapularis & Borrelia
+
+### Background on NEON sampling for ticks & Borrelia
+
+### Exploratory plots for tick distribution/abundance
+## Maps
+## Plots showing temporal component(s)
+## Plots showing NLCD trends
+## Plots showing data distribution
+
+### Exploratory plots for Borrelia distribution/prevalence
+## Maps
+## Plots showing temporal component(s)
+## Plots showing NLCD trends
+## Plots showing data distribution
+
+### Brief background on GAMs/BRMS
+
+### Modeling approach & results for ticks
+
+### Modeling approach & results for Borrelia
+
+***
+
+# Tick and *Borrelia* Background
+
+Lyme disease is the most common vector-borne disease in the U.S. and has been the subject of intense research for the last several decades. The disease is caused by a bacterial spirochete (*Borrelia* species) that is vectored by ticks (primarily *Ixodes scapularis*) Dozens of studies have addressed local- and landscape-scale factors that drive the dynamics of this system, with mixed success. Here, we aimed to use National Ecological Observatory Network (NEON) data to tease apart the factors important to spatiotemporal variability in (i) tick abundance and (ii) *Borrelia* prevalence, which together determine human Lyme risk.
+
+## Ecology of *Ixodes scapularis* & *Borrelia*
+
+### *I. scapularis*
+*I. scapularis* primary inhabits the eastern U.S. and has a ~2 year life cycle. **Eggs** are laid in spring of year *t* and hatch into **larvae** in summer of the same year. Larvae take a single bloodmeal (typically from a small mammal) in summer of year *t* and overwinter. Larvae then molt into **nymphs** in the late spring/early summer of year *t*+1. Nymphal ticks take a single bloodmeal in late spring/summer (typically from a small mammal, but also birds and reptiles). In autumn of year *t*+1, nymphs molt into **adults**. In late autumn/early winter of year *t*+1, adult ticks find an appropriate large mammal host (often deer) where the female takes a bloodmeal and sexual reproduction occurs. Eggs are laid the following spring, and the cycle repeats.
+
+Numerous aspects of the abiotic environment can control *I. scapularis* distribution and abundance, including temperature and humidity which jointly drive the risk of dessication. Yet, broad population patterns of *I. scapularis* most closely correlate with the distribution of forests because the most important hosts for both larvae/nymphs and adults (white-footed mice and deer, respectively) rely heavily on forested habitats. Within forested areas, temporal variability may be introduced by processes driving changes in host populations, most notably acorn masting patterns. There are thus temporal and spatial considerations *I. scapularis* presence and abundance.
+
+### *Borrelia*
+*Borrelia* is vectored by ticks, with numerous reservoirs (though, most often small rodents). Tick eggs are virtually Borrelia-free---in other words the bacteria is not vertically transmitted. Tick larvae and nymphs may become infected with *Borrelia* when taking bloodmeals from infected reservoirs. Adult hosts (e.g., deer) tend not to be reservoirs for *Borrelia*, and thus host--parasite dynamics in this system are limited primarily to interactions involving larval or nymphal ticks and reservoir hosts. 
+
+Because larvae are never infected prior to their bloodmeal (and only take 1 bloodmeal), they cannot transmit *Borrelia* to hosts and thus pose little threat to humans. Conversely, if larvae become infected during their bloodmeal, successfully molt into a nymph, and take a bloodmeal from a susceptible host they can transmit the infection. Owing to this and their small size (~1 mm) nyphal ticks pose the largest threat to human health via transmission of *Borrelia*. Infected adult ticks may also transmit *Borrelia* to humans but are conspicuous and more easily removed.
+
+For these reasons, the density of infected nymphs (D.O.N.) of *I. scapularis* is the most common and successful index of Lyme risk. Understanding what drives D.O.N. requires understanding what drives both nymphal density *and* nymphal infection prevalence.
+
+***
+
+[NEON SAMPLING STUFF -- MEB]
+
+***
+
+# Tick Data Exploration
+
+## Load data & set up
+```{r}
+## all domains
+read.csv("complete_data_IXOSCA.csv") %>%
+   filter(!is.na(rawCount)) -> tickAbund
+
+## add column w/ tick max by domain
+tickAbund %>% group_by(domainID) %>%
+   mutate(domainMax=max(rawCount)) %>%
+   ungroup() -> tickAbund
+
+## add domain-site
+tickAbund$domainSite <- paste(tickAbund$domainID, tickAbund$siteID)
+
+## add domain-site-plot
+tickAbund$domainSitePlot <- paste(tickAbund$domainID,
+                                  tickAbund$siteID, tickAbund$plotID)
+
+### Plot theme (stolen from WEM, who prob stole it from that tutorial) ###
+theme_tick <- function(){
+  theme_bw() +
+    theme(axis.text = element_text(size = 11), 
+          axis.title = element_text(size = 14),
+          axis.line.x = element_line(color="black"), 
+          axis.line.y = element_line(color="black"),
+          panel.border = element_blank(),
+          panel.grid.major.x = element_blank(),                                          
+          panel.grid.minor.x = element_blank(),
+          panel.grid.minor.y = element_blank(),
+          panel.grid.major.y = element_blank(),  
+          plot.margin = unit(c(1, 1, 1, 1), units = , "cm"),
+          plot.title = element_text(size = 16, vjust = 1, hjust = 0),
+          legend.text = element_text(size = 9),          
+          legend.title = element_blank(),                              
+          legend.position = "bottom", 
+          legend.key = element_blank(),
+          legend.background = element_rect(color = "black", 
+                                           fill = "transparent", 
+                                           size = 2, linetype = "blank"))
+}
+
+## load raincloud function
+source("https://gist.githubusercontent.com/benmarwick/2a1bb0133ff568cbe28d/raw/fb53bd97121f7f9ce947837ef1a4c65a73bffb3f/geom_flat_violin.R")
+
+### Mapping set up ###
+north_america <- map_data("world", region = c("USA"))
+north_america <- north_america[!(north_america$subregion %in% "Hawaii"),]
+```
+
+
+We limited all analyses to *I. scapularis* nymphs, which are the primary vector of human Lyme and for which there were plentiful NEON data. Formal analyses (W.E.M.) used tick *density*, in which raw tick counts were scaled by drag length, but because drag lenghts were fairly consistent across space/time (see plot directly below) and because raw counts are easier to intepret than densities, the former is displayed in exploratory maps/plots below.
+
+## Survey Effort
+```{r}
+ggplot() +
+   geom_line(data=tickAbund %>% filter(!is.na(rawCount)) %>%
+                group_by(siteID, month) %>%
+                summarise(meanMonthAbund = mean(totalSampledArea), fmonth=first(month)) %>%
+                ungroup(), 
+             aes(x=fmonth, y=meanMonthAbund, colour=siteID),
+             size=1) +
+   theme_tick() +
+   theme(legend.position = "none") +
+   labs(x="Month",y="Mean Drag Length") +
+   ggtitle("Survey effort across months",
+           subtitle = "Colour denotes site")  +
+   scale_x_continuous(breaks=c(2,4,6,8,10,12))
+```
+
+## Spatial variation in ticks
+
+A good starting place is to consider which NEON sites across the U.S. even have *I. scapularis* by plotting mean count per survey.
+```{r}
+ggplot() +
+   geom_map(map=north_america, data=north_america,
+            aes(long, lat, map_id=region),
+            colour="black", fill="gray80", size=.3) +
+   ylim(c(25, 50)) +
+   xlim(c(-125, -65)) +
+   geom_point(data = tickAbund %>% filter(!is.na(rawCount)) %>%
+                 group_by(siteID) %>%
+                 summarise(meanAbund = mean(rawCount), lat=first(decimalLatitude), lon=first(decimalLongitude)) %>% 
+                 ungroup(), 
+              aes(x = lon, y = lat, fill = meanAbund),
+              alpha = 0.8, size = 4, colour = "grey30",
+              shape = 21) +
+   scale_fill_viridis(option = "magma", direction = -1, begin = 0.2)+
+   theme_tick()+
+   theme(plot.title = element_text(hjust =0.5), axis.ticks = element_blank(), axis.text = element_blank(),
+         legend.position = "none")+
+   xlab("")+
+   ylab("")+
+   ggtitle("Mean I. scapularis Count by Site")
+```
+We can see that, largely, *I. scapularis* is restricted to east of the Mississippi River.
+
+
+Zooming in on the eastern half of the country, we can also see enormous plot-level variability in tick count per survey.
+```{r}
+ggplot() +
+   geom_map(map=north_america, data=north_america,
+            aes(long, lat, map_id=region),
+            colour="black", fill="gray80", size=.3) +
+   ylim(c(25, 50)) +
+   xlim(c(-95, -65)) +
+   geom_point(data = tickAbund %>% filter(!is.na(rawCount)) %>%
+                 group_by(plotID) %>%
+                 summarise(meanAbund = mean(rawCount), lat=first(decimalLatitude), lon=first(decimalLongitude)) %>%
+                 ungroup(), 
+              aes(x = jitter(lon, amount=.5), y = jitter(lat, amount=.5), fill = meanAbund),
+              alpha = 0.8, size = 4, colour = "grey30",
+              shape = 21) +
+   scale_fill_viridis(option = "magma", direction = -1, begin = 0.2)+
+   theme_tick()+
+   theme(plot.title = element_text(hjust =0.5), axis.ticks = element_blank(), axis.text = element_blank(),
+         legend.position = "none")+
+   xlab("")+
+   ylab("")+
+   ggtitle("Mean I. scapularis Count by \n Plot within Site (jittered)")
+```
+
+
+Can also view the distribution of count data across these scales. First, let's look at domain-level.
+```{r}
+ggplot(data=tickAbund,
+       aes(x=reorder(domainID, desc(rawCount)), y=rawCount)) +
+   geom_flat_violin(position=position_nudge(x=0.2,y=0), alpha=0.8) +
+   geom_point(aes(y=rawCount, color=domainID),
+              position=position_jitter(width=0.15), size=1, alpha=0.1) +
+   geom_boxplot(width=0.2, outlier.shape=NA, alpha=0.8) +
+   labs(y="Tick Count", x="NEON Domain") +
+   guides(fill=FALSE, color=FALSE) +
+   scale_y_continuous(limits=c(0,2500)) +
+   coord_flip() +
+   theme_tick() +
+   ggtitle("By Domain")
+```
+We can see that there are relatively few domains with *I. scapularis* and that there are some surveys that yielded extremely high nymph counts (~2500).
+
+If we next consider plots within domains, we can furher see that even where ticks are detected and sometimes abundant, most surveys still yield counts of 0.
+```{r}
+ggplot(data=filter(tickAbund, domainMax>0),
+       aes(x=domainSite, y=rawCount)) +
+   geom_flat_violin(position=position_nudge(x=0.2,y=0), alpha=0.8) +
+   geom_point(aes(y=rawCount, color=domainID),
+              position=position_jitter(width=0.015, height=.01), 
+              size=2, alpha=0.1) +
+   geom_boxplot(width=0.2, outlier.shape=NA, alpha=0.8) +
+   labs(y="Tick Count", x="NEON Site") +
+   guides(fill=FALSE, color=FALSE) +
+   scale_y_continuous(limits=c(0,100)) +
+   coord_flip() +
+   theme_tick() +
+   theme(axis.text.y = element_blank(),
+         axis.ticks.y = element_blank()) +
+   ggtitle("Site within Domain",
+           subtitle = "Colour denotes domain")
+```
+Note the x-axis range is restricted here to easier view the distribution of counts.
+
+The final scale of consideration is plots within sites, where we also see high levels of variation.
+```{r}
+ggplot(data=filter(tickAbund, domainMax>0),
+       aes(x=domainSitePlot, y=rawCount)) +
+   geom_flat_violin(position=position_nudge(x=0.2,y=0), alpha=0.8) +
+   geom_point(aes(y=rawCount, color=domainID),
+              position=position_jitter(width=0.015, height=.01), 
+              size=2, alpha=0.1) +
+   geom_boxplot(width=0.2, outlier.shape=NA, alpha=0.8) +
+   labs(y="Tick Count", x="NEON Plot") +
+   guides(fill=FALSE, color=FALSE) +
+   scale_y_continuous(limits=c(0,100)) +
+   coord_flip() +
+   theme_tick() +
+   theme(axis.text.y = element_blank(),
+         axis.ticks.y = element_blank()) +
+   ggtitle("Plot within Site within Domain",
+           subtitle="Colour denotes domain")
+```
+
+
+Exercises like these lead to several decisions:
+(i) exclude domains with no ticks
+(ii) within-site variability makes the use of latitude & longitude somewhat meaningless
+
+
+## Temporal variability
+As mentioned above, there are strong seasonal patterns in tick abundance owing to life cycle dynamics.
+
+Although some annual variation exists and should be accounted for, the most prominent feature of the data is the annual peak in *I. scapularis* nymphal abundance.
+```{r}
+ggplot() +
+   geom_line(data=tickAbund %>% filter(domainMax>0) %>%
+                group_by(plotID, month) %>%
+                summarise(meanMonthAbund = mean(rawCount), fmonth=first(month)) %>%
+                ungroup(), 
+             aes(x=fmonth, y=meanMonthAbund, colour=plotID),
+             size=1) +
+   theme_tick() +
+   theme(legend.position = "none") +
+   labs(x="Month", y="Mean Count") +
+   ggtitle("I. scapularis Count by Month",
+           subtitle = "Colour denotes plot") +
+   scale_x_continuous(breaks=c(2,4,6,8,10,12))
+```
+This pattern raises several important points:
+(i) there is a pretty clear split between "tick season" and "non-tick season"
+(ii) there is a unimodal hump-shaped peak in nymph populations within that "tick season"
+
+Yet, we still see plot-level variability. One important consideration that ties back to spatial patterns is habitat. We can split this temporal plot out by different NLCD classes to see some important patterns.
+```{r}
+ggplot() +
+   geom_line(data=tickAbund %>% filter(domainMax>0) %>%
+                group_by(nlcdClass, month, domainID) %>%
+                summarise(meanMonthAbund = mean(rawCount), fmonth=first(month),
+                          nlcd=first(nlcdClass), domain=first(domainID)) %>%
+                ungroup(), 
+             aes(x=fmonth, y=meanMonthAbund, colour=domain),
+             size=1) +
+   facet_wrap(~reorder(nlcd, desc(meanMonthAbund)), drop = TRUE) +
+   theme_tick() +
+   theme(legend.position = "none") +
+   labs(x="Month", y="Mean Count") +
+   ggtitle("I. scapularis across NLCD classes",
+           subtitle = "Colour denotes site") +
+   scale_x_continuous(breaks=c(2,4,6,8,10,12))
+```
+These results are cool and make a lot of sense! *I. scapularis* distribution is tightly linked to that of its forest-dwelling hosts. So in addition to broad, domain-scale distribution limits there are also very strong, local patterns of distribution and abundance.
+
+
+
+
+
+
+
+
