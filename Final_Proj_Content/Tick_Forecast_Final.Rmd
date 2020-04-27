@@ -490,7 +490,7 @@ nymph_pred <- cbind(nymph_pred, data.frame(predict(zip6, newdata = nymph_pred, s
    select(pred_prob, pred_prob_low, pred_prob_hi, pred_pois_count, pred_pois_count_low, pred_pois_count_hi))
 ```
 
-How well does the model do at probability of presence?
+### How well does the model do at probability of presence?
 
 ```{r, echo = FALSE}
 nymph_pred %>% ggplot() + geom_histogram(aes(pred_prob, fill = as.factor(nymph_presence))) + facet_wrap(~nymph_presence) + theme_classic() +
@@ -529,5 +529,119 @@ Using a confusion matrix to evaluate how well the model predicts presence/absenc
 ```{r}
 confusionMatrix(data = as.factor(as.numeric(nymph_pred$pred_prob>0.5)),
                       reference = as.factor(nymph_pred$nymph_presence))
+```
+
+Model seems fairly decent at predicting presence absence! 
+
+### How well does the model do at predicting abundance?
+
+Compare the predicted count from the model to the observed count:
+
+```{r}
+nymph_pred %>%
+  ggplot(aes(x=estimatedCount, y= pred_mean_count))+
+  geom_point(alpha = .5, size = 3, col = "magenta")+
+  geom_abline(slope = 1, intercept = 0, col ="magenta")+
+  theme_classic()+
+  ylab("Predicted count from model")+
+  xlab("Observed count")
+```
+
+Yikes. They seem to correlate, but the model is consistently predicting a higher count than observed (bias).
+
+Let's figure out why. First, extract the records that have bad predictions:
+```{r}
+nymph_pred$resid <- nymph_pred$estimatedCount - nymph_pred$pred_mean_count
+mean(nymph_pred$resid) # negative, meaning we are OVER predicting
+hist(nymph_pred$resid)
+# the "really bad" resids are < -25
+nymph_pred %>% filter(resid < -25) -> bad_preds
+```
+
+For the plots in the "bad" dataset, plot the time series. Predictions are in blue, actuals are in red.
+```{r}
+abun %>% filter(yearPlot %in% bad_preds$yearPlot) %>%
+  ggplot(aes(x=sDayofYear, y = estimatedCount, color = "training")) +
+  geom_point()+
+  facet_wrap(~plotID) +
+  geom_point(data = bad_preds, aes(x=sDayofYear, y = estimatedCount, color = "observed"))+
+  geom_point(data = bad_preds, aes(x=sDayofYear, y = pred_mean_count, color = "predicted"))+
+theme(axis.text.x = element_text(size = 6), axis.text.y = element_text(size = 6),
+         strip.background = element_blank(), axis.title = element_text(size = 12),
+         strip.text = element_blank())+
+   xlab("Day of Year (scaled)")+
+   ylab("Nymph count")+
+   scale_color_manual(values = c("dodgerblue", "coral", "black"))
+```
+
+What about the better predictions? Anything different?
+```{r}
+nymph_pred %>% filter(resid>-15 & resid < 15) -> good_preds
+abun %>% filter(yearPlot %in% good_preds$yearPlot) %>%
+  ggplot(aes(x=sDayofYear, y = estimatedCount, color = "training")) +
+  geom_point()+
+  facet_wrap(~plotID) +
+  geom_point(data = good_preds, aes(x=sDayofYear, y = estimatedCount, color = "observed"))+
+  geom_point(data = good_preds, aes(x=sDayofYear, y = pred_mean_count, color = "predicted"))+
+   theme(axis.text.x = element_text(size = 6), axis.text.y = element_text(size = 6),
+         strip.background = element_blank(), axis.title = element_text(size = 12),
+         strip.text = element_blank())+
+   xlab("Day of Year (scaled)")+
+   ylab("Nymph count")+
+   scale_color_manual(values = c("dodgerblue", "coral", "black"))
+
+```
+
+A lot of these are zeros -- the plot pretty much always has zero ticks and so the prediction matches well.
+
+Why the bias towards high nymph counts? Is 2018 weird? Combine the training and testing datasets and visualize yearly patterns in nymphal density. 
+
+```{r}
+nymph_all <- rbind(abun, nymphtest)
+
+nymph_all %>% ggplot(aes(x=sDayofYear, y = log(density+.1), group = plotID)) +
+  geom_point(aes(color = plotID), show.legend=FALSE)+
+  facet_wrap(~year)+
+   theme_tick()
+```
+
+Yes; 2018 seems like a weird year in terms of low densities, explaining why the model reliably over-predicts. 
+
+In future models, year-level covariates could be useful in making predictions; e.g. perhaps 2018 is a low mammal year or has a climate not favorable for nymph recruitment. 
+
+Plot predictions vs. actuals for plots that sometimes have ticks. Predictions are in blue, actuals are in red.
+```{r, echo = FALSE}
+# take a look at predictions for just those plots that *sometimes* have ticks
+
+abun %>% filter(totalTicks_plot>0) %>% pull(plotID) %>% unique() %>% as.character() ->  positive.plots
+
+abun %>% filter(plotID %in%  positive.plots[1:25], year == 2018, plotID %in% nymph_pred$plotID) %>%
+  ggplot(aes(x=sDayofYear, y = estimatedCount)) +
+  geom_point(aes(color = "training"))+
+  geom_point(data = filter(nymph_pred, plotID %in% positive.plots[1:25]), aes(x=sDayofYear, y = estimatedCount, color = "observed"))+
+  geom_point(data = filter(nymph_pred, plotID %in% positive.plots[1:25]), aes(x=sDayofYear, y = pred_mean_count, color = "predicted"))+
+   facet_wrap(~plotID, scales = "free") +
+   theme_tick()+
+   theme(axis.text.x = element_text(size = 6), axis.text.y = element_text(size = 6),
+         strip.background = element_blank(), axis.title = element_text(size = 12))+
+   xlab("Day of Year (scaled)")+
+   ylab("Nymph count")+
+   scale_color_manual(values = c("dodgerblue", "coral", "black"))
+
+# next 25
+abun %>% filter(plotID %in%  positive.plots[26:49], year == 2018, plotID %in% nymph_pred$plotID) %>%
+  ggplot(aes(x=sDayofYear, y = estimatedCount)) +
+  geom_point(aes(color = "training"))+
+  geom_point(data = filter(nymph_pred, plotID %in% positive.plots[26:49]), aes(x=sDayofYear, y = estimatedCount, color = "observed"))+
+  geom_point(data = filter(nymph_pred, plotID %in% positive.plots[26:49]), aes(x=sDayofYear, y = pred_mean_count, color = "predicted"))+
+   facet_wrap(~plotID, scales = "free") +
+   theme(axis.text.x = element_text(size = 6), axis.text.y = element_text(size = 6),
+         strip.background = element_blank(), axis.title = element_text(size = 12))+
+   xlab("Day of Year (scaled)")+
+   ylab("Nymph count")+
+   scale_color_manual(values = c("dodgerblue", "coral", "black"))
+   
+rm(bad_preds, good_preds, plotMeans)
+
 ```
 
