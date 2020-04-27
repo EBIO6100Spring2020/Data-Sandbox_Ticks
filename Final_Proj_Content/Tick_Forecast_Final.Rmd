@@ -2,7 +2,9 @@
 title: "Tick Abundance and Borrelia Prevalence Forecasting"
 author: "M.Y. Chen, W.E. Moss, B.K. Hobart, M.E. Bitters"
 date: "4/26/2020"
-output: pdf_document
+output:
+  html_document:
+    df_print: paged
 ---
 
 ```{r setup, include=FALSE}
@@ -10,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ## Load libraries
-```{r}
+```{r, message = FALSE, warning = FALSE}
 library(dplyr)
 library(tidyverse)
 library(forcats)
@@ -21,6 +23,13 @@ library(viridis)
 library(ggrepel)  # for annotations
 library(png)
 library(jpeg)
+library(mgcv)
+library(tidyr)
+library(broom)
+library(ggplot2)
+library(stringr)
+library(RColorBrewer)
+library(caret)
 ```
 
 
@@ -129,7 +138,7 @@ north_america <- north_america[!(north_america$subregion %in% "Hawaii"),]
 We limited all analyses to *I. scapularis* nymphs, which are the primary vector of human Lyme and for which there were plentiful NEON data. Formal analyses (W.E.M.) used tick *density*, in which raw tick counts were scaled by drag length, but because drag lenghts were fairly consistent across space/time (see plot directly below) and because raw counts are easier to intepret than densities, the former is displayed in exploratory maps/plots below.
 
 ## Survey Effort
-```{r}
+```{r, echo = FALSE}
 ggplot() +
    geom_line(data=tickAbund %>% filter(!is.na(rawCount)) %>%
                 group_by(siteID, month) %>%
@@ -148,7 +157,7 @@ ggplot() +
 ## Spatial variation in ticks
 
 A good starting place is to consider which NEON sites across the U.S. even have *I. scapularis* by plotting mean count per survey.
-```{r}
+```{r, echo = FALSE}
 ggplot() +
    geom_map(map=north_america, data=north_america,
             aes(long, lat, map_id=region),
@@ -174,7 +183,7 @@ We can see that, largely, *I. scapularis* is restricted to east of the Mississip
 
 
 Zooming in on the eastern half of the country, we can also see enormous plot-level variability in tick count per survey.
-```{r}
+```{r, echo = FALSE}
 ggplot() +
    geom_map(map=north_america, data=north_america,
             aes(long, lat, map_id=region),
@@ -199,7 +208,7 @@ ggplot() +
 
 
 Can also view the distribution of count data across these scales. First, let's look at domain-level.
-```{r}
+```{r, echo = FALSE}
 ggplot(data=tickAbund,
        aes(x=reorder(domainID, desc(rawCount)), y=rawCount)) +
    geom_flat_violin(position=position_nudge(x=0.2,y=0), alpha=0.8) +
@@ -216,7 +225,7 @@ ggplot(data=tickAbund,
 We can see that there are relatively few domains with *I. scapularis* and that there are some surveys that yielded extremely high nymph counts (~2500).
 
 If we next consider plots within domains, we can furher see that even where ticks are detected and sometimes abundant, most surveys still yield counts of 0.
-```{r}
+```{r, echo = FALSE}
 ggplot(data=filter(tickAbund, domainMax>0),
        aes(x=domainSite, y=rawCount)) +
    geom_flat_violin(position=position_nudge(x=0.2,y=0), alpha=0.8) +
@@ -237,7 +246,7 @@ ggplot(data=filter(tickAbund, domainMax>0),
 Note the x-axis range is restricted here to easier view the distribution of counts.
 
 The final scale of consideration is plots within sites, where we also see high levels of variation.
-```{r}
+```{r, echo = FALSE}
 ggplot(data=filter(tickAbund, domainMax>0),
        aes(x=domainSitePlot, y=rawCount)) +
    geom_flat_violin(position=position_nudge(x=0.2,y=0), alpha=0.8) +
@@ -266,7 +275,7 @@ Exercises like these lead to several decisions:
 As mentioned above, there are strong seasonal patterns in tick abundance owing to life cycle dynamics.
 
 Although some annual variation exists and should be accounted for, the most prominent feature of the data is the annual peak in *I. scapularis* nymphal abundance.
-```{r}
+```{r, echo = FALSE}
 ggplot() +
    geom_line(data=tickAbund %>% filter(domainMax>0) %>%
                 group_by(plotID, month) %>%
@@ -286,14 +295,14 @@ This pattern raises several important points:
 (ii) there is a unimodal hump-shaped peak in nymph populations within that "tick season"
 
 Yet, we still see plot-level variability. One important consideration that ties back to spatial patterns is habitat. We can split this temporal plot out by different NLCD classes to see some important patterns.
-```{r}
-ggplot() +
-   geom_line(data=tickAbund %>% filter(domainMax>0) %>%
+```{r, echo = FALSE}
+# WEM edited this to make run
+ggplot(data=tickAbund %>% filter(domainMax>0) %>%
                 group_by(nlcdClass, month, domainID) %>%
                 summarise(meanMonthAbund = mean(rawCount), fmonth=first(month),
                           nlcd=first(nlcdClass), domain=first(domainID)) %>%
-                ungroup(), 
-             aes(x=fmonth, y=meanMonthAbund, colour=domain),
+                ungroup()) +
+   geom_line(aes(x=fmonth, y=meanMonthAbund, colour=domain),
              size=1) +
    facet_wrap(~reorder(nlcd, desc(meanMonthAbund)), drop = TRUE) +
    theme_tick() +
@@ -307,8 +316,147 @@ These results are cool and make a lot of sense! *I. scapularis* distribution is 
 
 
 
+# Tick Abundance Models
+
+## Modeling approach
+Our goal was to build a model that could be used to predict and understand tick abundances at NEON sites. We investigated several modeling approaches including state-space time series, variance partitioning, boosted regression trees, generalized linear mixed models, and generalized additive models. We ultimately proceeded with GAMs due to their ability to handle the non-linear, temporal element of our data and their flexibility in response variable. 
+
+One major challenge to modeling tick abundances (specifically, the densities of Ixodes nymphs) was the extreme zero-inflation in our data (as explored above). To handle this, we used zero-inflated poisson models. These models have two parts, one to predict the probability of 0s (the zero inflation model), and one to predict the counts (poisson model). 
+
+We explored several predictors for both the poisson and the zero inflation models. For the zero inflation model, the predictor variables we considered were: 
+
+   * `nlcdClass`
+   * `season` (a binary predictor; whether the sampling event was between May-September or not)
+   * `plotID` (a random effect)
+
+Therefore, these variables influenced whether there were ticks present or not (probability of tick count being a 0 or not).
+
+For the poisson model (counts), the predictor variables we considered were:
+
+   * `year-plotID` (the combination of year and plot, as a random effect)
+   * `plotID`  (a random effect)
+   * `dayofYear` (a smoothed term)
+   * `year` (a random effect)
+
+Finally, we accounted for sampling effort by including the area of the tick drag as an offset.
 
 
+## Read in the data
 
+We fit our models using a training dataset that had one tick season removed from it (May through July, 2018; later used as the validation dataset). This dataset is similar to the one used in data exploration, but has a few columns added and scaled. Note that the domains with no ticks present were removed, but this dataset does contain plots that never had ticks.
 
+```{r}
+abun <- readRDS("data/nymph_abun_train.Rdata")
+```
 
+## Fit the models
+
+Models are fit using the `mgcv` package. We used AIC for model selection. 
+
+Code for fitting models is below. Note that if you run the code below verbatim, it will read in the list of model objects instead of actually fitting all the models, since model fitting is time intensive.
+
+```{r, message = FALSE}
+# check if models have already been run
+models.exist <- file.exists("model_objects/zipmodels_tick_abun.Rdata")
+# if so, read them in and can skip the next part
+if(models.exist==TRUE){
+  readRDS("Model_objects/zipmodels_tick_abun.Rdata") -> zipmodlist
+  list2env(zipmodlist, .GlobalEnv)
+  rm(zipmodlist)
+}
+
+# if the models haven't been pulled/run this will run them
+# careful as this may take a while
+if(models.exist == FALSE){
+  abun <- readRDS("data_derived/nymph_abun_all.Rdata")
+  head(abun)
+  # fit zero-inflated Poissons
+  # first part of the model: poisson process (abundance)
+  # second part of the model: zero inflation process (prob of 0)
+  # a null model
+  zip0 <- gam(list(estimatedCount ~ offset(logSampledArea),
+                   ~1),
+              data = abun, family = ziplss())
+  
+  # random effects only
+  zip1 <- gam(list(estimatedCount ~ s(plotID, bs = "re") + offset(logSampledArea) ,
+                   ~s(plotID, bs = "re")),
+              data = abun, family = ziplss())
+  
+  # add in season as a predictor of presence
+  zip2 <- gam(list(estimatedCount ~ s(plotID, bs = "re") + offset(logSampledArea) ,
+                   ~ season + s(plotID, bs = "re")),
+              data = abun, family = ziplss())
+  
+  # add in nlcd as a predictor of presence
+  zip3 <- gam(list(estimatedCount ~s(plotID, bs = "re") + offset(logSampledArea) ,
+                   ~ season + nlcdClass + s(plotID, bs = "re")),
+              data = abun, family = ziplss())
+  
+  # add in day of year as a predictor of abundance
+  zip4 <- gam(list(estimatedCount ~ s(sDayofYear) + s(plotID, bs = "re") + offset(logSampledArea),
+                   ~season + nlcdClass + s(plotID, bs = "re")),
+              data = abun, family = ziplss())
+  
+  # add year as a random effect 
+  zip5 <- gam(list(estimatedCount ~ s(sDayofYear) + s(fYear, bs = "re") + s(plotID, bs = "re") + offset(logSampledArea) ,
+                   ~season + nlcdClass + s(plotID, bs = "re")),
+              data = abun, family = ziplss())
+  
+  # add year as a random effect NESTED witin plot 
+  zip6 <- gam(list(estimatedCount ~ s(sDayofYear) +offset(logSampledArea) + s(yearPlot, bs = "re"),
+                   ~season + nlcdClass + s(plotID, bs = "re")),
+              data = abun, family = ziplss())
+  # add a randomn smooth for day of year by plot
+  zip7 <- gam(list(estimatedCount ~ s(sDayofYear, plotID, bs = "re") +fYear + offset(logSampledArea) ,
+                   ~season + nlcdClass + s(plotID, bs = "re")),
+              data = abun, family = ziplss())
+  zip8 <- gam(list(estimatedCount ~ s(sDayofYear, yearPlot, bs = "re") + offset(logSampledArea), 
+                   ~season + nlcdClass + s(plotID, bs = "re")), 
+              data = abun, family = ziplss())
+  pattern <- ls(pattern="zip") # get names of models
+  # pattern <- grep("zip", names(.GlobalEnv), value = TRUE)
+  models <- do.call("list", mget(pattern))
+  
+  # save models
+  saveRDS(models, "Model_objects/zipmodels_tick_abun.Rdata" )
+}
+```
+
+Compare models with AIC:
+```{r}
+pattern <- ls(pattern="zip") # get names of models
+zipmodlist <- do.call("list", mget(pattern)) # make a list of all them
+do.call(rbind, lapply(zipmodlist, glance)) %>% data.frame() %>%
+  mutate(model = pattern) %>% select(model, everything(.)) %>% arrange(AIC)
+```
+
+Explore output from "best" model:
+
+```{r}
+summary(zip6)
+```
+
+In order to better extract uncertainty estimates, we can fit the best model in `brms` which will give posterior distributions of parameters. 
+
+Note that if you want to run this model you will have to manually change the code below; otherwise, it reads in an existing model object. 
+```{r, warnings = FALSE, message = FALSE}
+run.mod <- "no" # change this if you want to run the model 
+# warning that running it takes a long time (e.g. hours)!
+if(run.mod == "yes"){
+  require(brms)
+  b_zip6 <- brm(bf(
+    estimatedCount ~  s(sDayofYear)+ (1|yearPlot) + offset(logSampledArea), # observation-level RE
+    zi ~ nlcdClass + season + (1|plotID)),
+    data = abun, family = zero_inflated_poisson(), iter =1000, chains = 4)
+  b_zip7 <- update(b_zip6, iter = 2000) # run chains longer
+  saveRDS(b_zip7, "Model_objects/b_zip7.Rdata")
+}
+
+# if you don't want to run it can just load it
+b_zip7 <- readRDS("model_objects/b_zip7.Rdata")
+summary(b_zip7)
+plot(b_zip7)
+```
+
+This model didn't converge; the chains look pretty bad. In the future, we could use stronger priors and explore correlation among parameters which might be leading to the issue. For now, we will just proceed with maximum likelihood models fit with `mgcv`. 
