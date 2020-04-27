@@ -86,23 +86,25 @@ For these reasons, the density of infected nymphs (D.O.N.) of *I. scapularis* is
 # Tick Data Exploration
 
 ## Load data & set up
-```{r}
+```{r, warnings = FALSE, message = FALSE, include = FALSE}
 ## all domains
-read.csv("complete_data_IXOSCA.csv") %>%
-   filter(!is.na(rawCount)) -> tickAbund
-
-## add column w/ tick max by domain
-tickAbund %>% group_by(domainID) %>%
-   mutate(domainMax=max(rawCount)) %>%
-   ungroup() -> tickAbund
-
-## add domain-site
-tickAbund$domainSite <- paste(tickAbund$domainID, tickAbund$siteID)
-
-## add domain-site-plot
-tickAbund$domainSitePlot <- paste(tickAbund$domainID,
-                                  tickAbund$siteID, tickAbund$plotID)
-
+# read.csv("complete_data_IXOSCA.csv") %>%
+#    filter(!is.na(rawCount)) -> tickAbund
+# 
+# ## add column w/ tick max by domain
+# tickAbund %>% group_by(domainID) %>%
+#    mutate(domainMax=max(rawCount)) %>%
+#    ungroup() -> tickAbund
+# 
+# ## add domain-site
+# tickAbund$domainSite <- paste(tickAbund$domainID, tickAbund$siteID)
+# 
+# ## add domain-site-plot
+# tickAbund$domainSitePlot <- paste(tickAbund$domainID,
+#                                   tickAbund$siteID, tickAbund$plotID)
+# 
+# saveRDS(tickAbund, "data/tickAbund_eda.Rdata")
+tickAbund <- readRDS("data/tickAbund_eda.Rdata")
 ### Plot theme (stolen from WEM, who prob stole it from that tutorial) ###
 theme_tick <- function(){
   theme_bw() +
@@ -138,7 +140,7 @@ north_america <- north_america[!(north_america$subregion %in% "Hawaii"),]
 We limited all analyses to *I. scapularis* nymphs, which are the primary vector of human Lyme and for which there were plentiful NEON data. Formal analyses (W.E.M.) used tick *density*, in which raw tick counts were scaled by drag length, but because drag lenghts were fairly consistent across space/time (see plot directly below) and because raw counts are easier to intepret than densities, the former is displayed in exploratory maps/plots below.
 
 ## Survey Effort
-```{r, echo = FALSE}
+```{r, echo = FALSE, warnings = FALSE, message = FALSE}
 ggplot() +
    geom_line(data=tickAbund %>% filter(!is.na(rawCount)) %>%
                 group_by(siteID, month) %>%
@@ -157,7 +159,7 @@ ggplot() +
 ## Spatial variation in ticks
 
 A good starting place is to consider which NEON sites across the U.S. even have *I. scapularis* by plotting mean count per survey.
-```{r, echo = FALSE}
+```{r, echo = FALSE, warnings = FALSE, message = FALSE}
 ggplot() +
    geom_map(map=north_america, data=north_america,
             aes(long, lat, map_id=region),
@@ -183,7 +185,7 @@ We can see that, largely, *I. scapularis* is restricted to east of the Mississip
 
 
 Zooming in on the eastern half of the country, we can also see enormous plot-level variability in tick count per survey.
-```{r, echo = FALSE}
+```{r, echo = FALSE, warnings = FALSE, message = FALSE}
 ggplot() +
    geom_map(map=north_america, data=north_america,
             aes(long, lat, map_id=region),
@@ -208,7 +210,7 @@ ggplot() +
 
 
 Can also view the distribution of count data across these scales. First, let's look at domain-level.
-```{r, echo = FALSE}
+```{r, echo = FALSE, warnings = FALSE, message = FALSE}
 ggplot(data=tickAbund,
        aes(x=reorder(domainID, desc(rawCount)), y=rawCount)) +
    geom_flat_violin(position=position_nudge(x=0.2,y=0), alpha=0.8) +
@@ -225,7 +227,7 @@ ggplot(data=tickAbund,
 We can see that there are relatively few domains with *I. scapularis* and that there are some surveys that yielded extremely high nymph counts (~2500).
 
 If we next consider plots within domains, we can furher see that even where ticks are detected and sometimes abundant, most surveys still yield counts of 0.
-```{r, echo = FALSE}
+```{r, echo = FALSE, warnings = FALSE, message = FALSE}
 ggplot(data=filter(tickAbund, domainMax>0),
        aes(x=domainSite, y=rawCount)) +
    geom_flat_violin(position=position_nudge(x=0.2,y=0), alpha=0.8) +
@@ -246,7 +248,7 @@ ggplot(data=filter(tickAbund, domainMax>0),
 Note the x-axis range is restricted here to easier view the distribution of counts.
 
 The final scale of consideration is plots within sites, where we also see high levels of variation.
-```{r, echo = FALSE}
+```{r, echo = FALSE, warnings = FALSE, message = FALSE}
 ggplot(data=filter(tickAbund, domainMax>0),
        aes(x=domainSitePlot, y=rawCount)) +
    geom_flat_violin(position=position_nudge(x=0.2,y=0), alpha=0.8) +
@@ -275,7 +277,7 @@ Exercises like these lead to several decisions:
 As mentioned above, there are strong seasonal patterns in tick abundance owing to life cycle dynamics.
 
 Although some annual variation exists and should be accounted for, the most prominent feature of the data is the annual peak in *I. scapularis* nymphal abundance.
-```{r, echo = FALSE}
+```{r, echo = FALSE, warnings = FALSE, message = FALSE}
 ggplot() +
    geom_line(data=tickAbund %>% filter(domainMax>0) %>%
                 group_by(plotID, month) %>%
@@ -295,7 +297,7 @@ This pattern raises several important points:
 (ii) there is a unimodal hump-shaped peak in nymph populations within that "tick season"
 
 Yet, we still see plot-level variability. One important consideration that ties back to spatial patterns is habitat. We can split this temporal plot out by different NLCD classes to see some important patterns.
-```{r, echo = FALSE}
+```{r, echo = FALSE, warnings = FALSE, message = FALSE}
 # WEM edited this to make run
 ggplot(data=tickAbund %>% filter(domainMax>0) %>%
                 group_by(nlcdClass, month, domainID) %>%
@@ -517,6 +519,8 @@ Were there plots where model predicts very high chance of ticks, but they were N
 
 Of the samples where model predicted > 0.6 chance of ticks, 17 percent did NOT have ticks.
 
+Overall, how well does predicted probablity of presence match observed presence?
+
 ```{r}
 nymph_pred %>% ggplot(aes(x = pred_prob, y = nymph_presence)) + geom_jitter(width = .001, height = 0.05, alpha = .3, size = 3, col = "forestgreen") +
   xlab("Model predicted probability of presence")+
@@ -547,7 +551,7 @@ nymph_pred %>%
   xlab("Observed count")
 ```
 
-Yikes. They seem to correlate, but the model is consistently predicting a higher count than observed (bias).
+Yikes. They seem to correlate, but the model is consistently predicting a higher count than observed (e.g. our model is biased).
 
 Let's figure out why. First, extract the records that have bad predictions:
 ```{r}
@@ -558,8 +562,9 @@ hist(nymph_pred$resid)
 nymph_pred %>% filter(resid < -25) -> bad_preds
 ```
 
-For the plots in the "bad" dataset, plot the time series. Predictions are in blue, actuals are in red.
-```{r}
+For the plots in the "bad" dataset, plot the time series for 2018 only. Predictions are in blue, actuals are in red:
+
+```{r, echo = FALSE}
 abun %>% filter(yearPlot %in% bad_preds$yearPlot) %>%
   ggplot(aes(x=sDayofYear, y = estimatedCount, color = "training")) +
   geom_point()+
@@ -574,8 +579,9 @@ theme(axis.text.x = element_text(size = 6), axis.text.y = element_text(size = 6)
    scale_color_manual(values = c("dodgerblue", "coral", "black"))
 ```
 
-What about the better predictions? Anything different?
-```{r}
+What about the predictions that aren't as bad? Anything different about those time series?
+
+```{r, echo = FALSE}
 nymph_pred %>% filter(resid>-15 & resid < 15) -> good_preds
 abun %>% filter(yearPlot %in% good_preds$yearPlot) %>%
   ggplot(aes(x=sDayofYear, y = estimatedCount, color = "training")) +
@@ -602,7 +608,9 @@ nymph_all <- rbind(abun, nymphtest)
 nymph_all %>% ggplot(aes(x=sDayofYear, y = log(density+.1), group = plotID)) +
   geom_point(aes(color = plotID), show.legend=FALSE)+
   facet_wrap(~year)+
-   theme_tick()
+   theme_tick()+
+   xlab("Day of Year (scaled)") +
+   ylab("log (nymph density)")
 ```
 
 Yes; 2018 seems like a weird year in terms of low densities, explaining why the model reliably over-predicts. 
@@ -610,7 +618,7 @@ Yes; 2018 seems like a weird year in terms of low densities, explaining why the 
 In future models, year-level covariates could be useful in making predictions; e.g. perhaps 2018 is a low mammal year or has a climate not favorable for nymph recruitment. 
 
 Plot predictions vs. actuals for plots that sometimes have ticks. Predictions are in blue, actuals are in red.
-```{r, echo = FALSE}
+```{r, echo = FALSE, warnings = FALSE}
 # take a look at predictions for just those plots that *sometimes* have ticks
 
 abun %>% filter(totalTicks_plot>0) %>% pull(plotID) %>% unique() %>% as.character() ->  positive.plots
@@ -645,3 +653,13 @@ rm(bad_preds, good_preds, plotMeans)
 
 ```
 
+## Closing thoughts
+
+Overall, the model does better at presence/absence than abundance. However, the way we did our testing and training dataset matters; our test dataset was subsetted by year. Therefore if abundance (rather than presence/absence) varies strongly across years, then our data won't be as good at predicting abundance.
+
+There is a lot of variation among plots. Right now, this is a random effect and if we had previous years of data, we were fairly good at predicting presence/absence at a plot in the next year. But what if we wanted to predict entirely new plots? Right now, the only informative covariates are day of year and nlcd. The uncertainty on the nlcd classes is large. Therefore, if we want to predict what will happen at NEW plots, we need a lot more plot-level and year-level information. This would be useful not only in predictions, but also in understanding mechanism; right now we know very little about why some plots have high tick densities. 
+
+Future models could incorporate small mammal density, litter, and other plot-year level information to make predictions. T
+
+# Borrelia Prevalence Models
+*Melissas stuff will go here
