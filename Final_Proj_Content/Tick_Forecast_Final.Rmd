@@ -437,6 +437,7 @@ Explore output from "best" model:
 summary(zip6)
 ```
 
+## Optional: re-fit best model with brms
 In order to better extract uncertainty estimates, we can fit the best model in `brms` which will give posterior distributions of parameters. 
 
 Note that if you want to run this model you will have to manually change the code below; otherwise, it reads in an existing model object. 
@@ -456,7 +457,77 @@ if(run.mod == "yes"){
 # if you don't want to run it can just load it
 b_zip7 <- readRDS("model_objects/b_zip7.Rdata")
 summary(b_zip7)
-plot(b_zip7)
+plot(b_zip7, ask = FALSE, newpage = FALSE)
 ```
 
 This model didn't converge; the chains look pretty bad. In the future, we could use stronger priors and explore correlation among parameters which might be leading to the issue. For now, we will just proceed with maximum likelihood models fit with `mgcv`. 
+
+## Evaluate model fit using validation dataset
+
+The test/validation dataset is similar to the training, except contains a few months of data that were left out (May - July 2018). 
+
+```{r}
+nymphtest <- readRDS("data/nymph_abun_test.Rdata")
+```
+
+We will predict tick abundances using our model and compare to the actual abundances.
+
+From our two-part model, we can predict a few different responses. (1) probability of presence, from the zero-inflated (logit) part of the model (2) tick count if they are present from the poisson part of the model and (3) mean expected count, which multiplies the two together (type = "response").
+
+```{r, warning = FALSE, message = FALSE}
+nymph_pred <- nymphtest 
+
+# get predicted mean count (3)
+nymph_pred <- cbind(nymph_pred, data.frame(predict(zip6, newdata = nymph_pred, type = "response", se.fit = TRUE)) %>%
+                       select(pred_mean_count = fit, pred_mean_count_se = se.fit))
+# i'm skeptical of the standard error here...
+
+
+# also get predicted probability
+nymph_pred <- cbind(nymph_pred, data.frame(predict(zip6, newdata = nymph_pred, se.fit = TRUE)) %>%  # predict 
+   mutate(pred_prob = plogis(fit.2), pred_prob_low = plogis(fit.2-2*se.fit.2), pred_prob_hi = plogis(fit.2 + 2*se.fit.2), # back transform
+          pred_pois_count = exp(fit.1), pred_pois_count_low = exp(fit.1 - 2*se.fit.1), pred_pois_count_hi = exp(fit.1 + 2*se.fit.1)) %>%
+   select(pred_prob, pred_prob_low, pred_prob_hi, pred_pois_count, pred_pois_count_low, pred_pois_count_hi))
+```
+
+How well does the model do at probability of presence?
+
+```{r, echo = FALSE}
+nymph_pred %>% ggplot() + geom_histogram(aes(pred_prob, fill = as.factor(nymph_presence))) + facet_wrap(~nymph_presence) + theme_classic() +
+  xlab("Model predicted probability of presence") +
+  labs(fill = "Observed Tick Presence")
+```
+
+Were there plots where model predicts very low prob of ticks but they were observed?
+```{r}
+(nymph_pred %>% filter(nymph_presence==1, pred_prob  < 0.05) %>% nrow())/(nymph_pred %>% filter(pred_prob  < 0.05) %>% nrow())
+
+(nymph_pred %>% filter(nymph_presence==1, pred_prob  < 0.1) %>% nrow())/(nymph_pred %>% filter(pred_prob  < 0.1) %>% nrow())
+
+(nymph_pred %>% filter(nymph_presence==1, pred_prob  < 0.25) %>% nrow())/(nymph_pred %>% filter(pred_prob  < 0.25) %>% nrow())
+```
+Of the samples where the model predicted < 0.05 chance of ticks, 3.6 percent had ticks (4 percent error).
+Of the samples where the model predicted < 0.10 chance of ticks, 4.1 percent had ticks.
+Of the samples where the model predicted < 0.25 chance of ticks, 11 percent had ticks.
+
+Were there plots where model predicts very high chance of ticks, but they were NOT observed?
+```{r}
+(nymph_pred %>% filter(nymph_presence==0, pred_prob  > 0.6) %>% nrow())/(nymph_pred %>% filter(pred_prob  > 0.6) %>% nrow())
+```
+
+Of the samples where model predicted > 0.6 chance of ticks, 17 percent did NOT have ticks.
+
+```{r}
+nymph_pred %>% ggplot(aes(x = pred_prob, y = nymph_presence)) + geom_jitter(width = .001, height = 0.05, alpha = .3, size = 3, col = "forestgreen") +
+  xlab("Model predicted probability of presence")+
+  ylab("Observed tick presence") +
+  theme_classic()
+```
+
+Using a confusion matrix to evaluate how well the model predicts presence/absence:
+
+```{r}
+confusionMatrix(data = as.factor(as.numeric(nymph_pred$pred_prob>0.5)),
+                      reference = as.factor(nymph_pred$nymph_presence))
+```
+
