@@ -133,7 +133,7 @@ MATCHEDCOUNTS_tckfield_tcktax <- tck_tax_2 %>%
   group_by(sampleID, sexOrAge) %>% # make male and female adults the same line
   summarize(allCounts=sum(individualCount)) %>%
   spread(key=sexOrAge, value=allCounts) %>%
-  mutate(adultCount_tax=sum(c(Adult, Female, Male), na.rm = TRUE), nymphCount_tax = Nymph, larvaCount_tax = Larva) %>%
+  mutate(adultCount_tax=sum(c(Female, Male), na.rm = TRUE), nymphCount_tax = Nymph, larvaCount_tax = Larva) %>%
   select(sampleID, adultCount_tax, Female, Male, nymphCount_tax, larvaCount_tax)%>%
   right_join(tck_field_5) %>%
   mutate(totalCount_nolarva_tax=sum(c(adultCount_tax, nymphCount_tax), na.rm = TRUE)
