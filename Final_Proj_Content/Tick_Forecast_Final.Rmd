@@ -79,7 +79,15 @@ For these reasons, the density of infected nymphs (D.O.N.) of *I. scapularis* is
 
 ***
 
-[NEON SAMPLING STUFF -- MEB]
+### National Ecological Observatory Network (NEON) Tick Sampling
+
+The National Ecological Observatory Network (NEON) is a long-term, large-scale, NSF-funded project with the goal to monitor global change at a continental scale. NEON's sampling design provides a unique opportunity to examine large spatial and temporal scale questions about hosts, vectors, and parasites as they all respond to environmental change in different ways.
+
+NEON is organized into 20 domains, which were delineated based on ecoclimatic state variables. Within each domain, there is one terrestrial core site and one or two terrestrial relocatable sites. Sites encompass much of the diversity that exists in North America - sites exists at sea level to 12,000 ft above sea level, in temperate and tropical forests, and in desert and mountain ecosystems. Sites are further stratified into plots, which encompass local scale variation.
+
+NEON tick sampling uses the dragging and flagging method, which is arguably the most commonly used method to sample ticks. This method is effective for catching questing ticks, so it most closely approximates the human risk of picking up ticks from the environment. To sample, a 1 m^2 piece of white cloth is dragged along the ground at a slow pace along the border of a 40x40 m tick plot. It is examined every 5-10 m, and any adult, nymph, and larval ticks are removed and collected in 95% EtOH. Flagging is used when vegetation prevents the drag sampling. Sampling frequency occurs once every six weeks until one or more ticks are collected at a site. Once at least one tick is collected, sampling frequency increases to once every three weeks. Sampling is only conducted when the high temperature on the previous day was >0 degC and the mean temperature for the previous five days was >7 degC. 
+
+Collected ticks are sent to external facilities for taxonomic identification at the adult and nymph level and pathogen testing. Following identification, ticks are combined by species, life stage, site, and sampling event and tested for pathogens. Actual sample size depends on the sampling event success, but for any species/life stage combination, a minimum of 10 and target of 100 individuals per site/sampling event combination is recommended. 
 
 ***
 
@@ -315,6 +323,191 @@ ggplot(data=tickAbund %>% filter(domainMax>0) %>%
    scale_x_continuous(breaks=c(2,4,6,8,10,12))
 ```
 These results are cool and make a lot of sense! *I. scapularis* distribution is tightly linked to that of its forest-dwelling hosts. So in addition to broad, domain-scale distribution limits there are also very strong, local patterns of distribution and abundance.
+
+
+## PREVALENCE 
+
+Just like with tick abundance, it is useful to look at where *Borrelia* spp. occurs across NEON sites. This analysis was restricted to *Borrelia burgdorferi*, *B. mayonii*, *B. burgdorferi* sensu lato, *B. miyamotoi*, and *B. lonestari* found in *Ixodes* spp. nymphs. We do not differentiate between individual species because they are all the causal agents of Lyme Disease in humans and use similar mechanisms to infect hosts.
+
+```{r, warnings = FALSE, message = FALSE, include = FALSE}
+# Read in data
+#TickPathIndiv <- read.csv("Tick_Pathogen_Individual.csv")
+#TickPathAgg <- read.csv("Tick_Borrelia_Prev_Aggregated.csv")
+
+# Filter to just IXOSCA
+#TickPathAgg <- TickPathAgg %>% 
+#    filter(Taxonomy == "IXOSCA")
+
+# Join to get lat and long for plots
+#TickPathAgg <- inner_join(TickPathAgg, TickPathIndiv)
+
+#saveRDS(TickPathAgg, "tickPrev_eda.Rdata")
+TickPathAgg <- readRDS("data/tickPrev_eda.Rdata")
+```
+
+## Spatial variability
+
+*Borrelia* spp. could theoretically inhabit any domain that has *Ixodes* ticks but is actually only present in a subset of domains. The upper Midwest and Northeast have the highest prevalence among domains where it occurs. 
+
+```{r, echo = FALSE, warnings = FALSE, message = FALSE}
+# mean prevalence by domain
+ggplot() +
+    geom_map(map=north_america, data=north_america,
+             aes(long, lat, map_id=region),
+             colour="black", fill="gray80", size=1) +
+    ylim(c(25, 50)) +
+    xlim(c(-125, -65)) +
+    geom_point(data = TickPathAgg %>% filter(!is.na(Borrelia.Prev)) %>%
+                   group_by(domainID) %>%
+                   summarise(meanPrev = mean(Borrelia.Prev), lat=first(decimalLatitude), lon=first(decimalLongitude)) %>% 
+                   ungroup(), 
+               aes(x = lon, y = lat, fill = meanPrev),
+               alpha = 0.8, size = 4, colour = "grey30",
+               shape = 21) +
+    scale_fill_viridis(option = "magma", direction = -1, begin = 0.2)+
+    theme_tick()+
+    theme(plot.title = element_text(hjust =0.5), axis.ticks = element_blank(), axis.text = element_blank())+
+    xlab("")+
+    ylab("")+
+    ggtitle("Mean Borrelia spp. prevalence by domain")
+```
+
+
+Just like with tick abundance, *Borrelia* spp. prevalence is variable at the site level within domains and at the plot level within sites. Even among domains or sites that are heavily invested with ticks, *Borrelia* spp. can remain absent at smaller scales. This is likely dominated by local characteristics at the plot scale (vegetation, microhabitats, microclimates) and density of small mammals and deer.
+
+
+```{r, echo = FALSE, warnings = FALSE, message = FALSE}
+# mean prevalence by site
+ggplot() +
+    geom_map(map=north_america, data=north_america,
+             aes(long, lat, map_id=region),
+             colour="black", fill="gray80", size=1) +
+    ylim(c(25, 50)) +
+    xlim(c(-95, -65)) +
+    geom_point(data = TickPathAgg %>% filter(!is.na(Borrelia.Prev)) %>%
+                   group_by(siteID) %>%
+                   summarise(meanPrev = mean(Borrelia.Prev), lat=first(decimalLatitude), lon=first(decimalLongitude)) %>% 
+                   ungroup(), 
+               aes(x = lon, y = lat, fill = meanPrev),
+               alpha = 0.8, size = 4, colour = "grey30",
+               shape = 21) +
+    scale_fill_viridis(option = "magma", direction = -1, begin = 0.2)+
+    theme_tick()+
+    theme(plot.title = element_text(hjust =0.5), axis.ticks = element_blank(), axis.text = element_blank())+
+    xlab("")+
+    ylab("")+
+    ggtitle("Mean Borrelia spp. prevalence by site")
+```
+
+
+```{r, echo = FALSE, warnings = FALSE, message = FALSE}
+# mean prevalence by plot
+ggplot() +
+    geom_map(map=north_america, data=north_america,
+             aes(long, lat, map_id=region),
+             colour="black", fill="gray80", size=1) +
+    ylim(c(25, 50)) +
+    xlim(c(-95, -65)) +
+    geom_point(data = TickPathAgg %>% filter(!is.na(Borrelia.Prev)) %>%
+                   group_by(plotID) %>%
+                   summarise(meanPrev = mean(Borrelia.Prev), lat=first(decimalLatitude), lon=first(decimalLongitude)) %>% 
+                   ungroup(), 
+               aes(x = jitter(lon, amount = 0.5), y = jitter(lat, amount = 0.5), fill = meanPrev),
+               alpha = 0.8, size = 4, colour = "grey30",
+               shape = 21) +
+    scale_fill_viridis(option = "magma", direction = -1, begin = 0.2)+
+    theme_tick()+
+    theme(plot.title = element_text(hjust =0.5), axis.ticks = element_blank(), axis.text = element_blank())+
+    xlab("")+
+    ylab("")+
+    ggtitle("Mean Borrelia spp. prevalence by plot")
+```
+
+Elevation could influence occurrence and prevalence of *Borrelia* spp. by influencing vegetation and climate. At the plot level, it doesn't look like elevation is really important. Within a given elevation, there could be high or low prevalence. 
+
+```{r, echo = FALSE, warnings = FALSE, message = FALSE}
+# Elevation
+ggplot() +
+    geom_point(data=TickPathAgg %>% group_by(plotID) %>%
+                  summarise(meanPrev = mean(Borrelia.Prev), elev=first(elevation)) %>%
+                  ungroup(), 
+              aes(x=elev, y=meanPrev, colour=plotID), size=2) +
+    theme_tick() +
+    theme(legend.position = "none") +
+    labs(x="Elevation (m.a.s.l.)", y="Prevalence") +
+    ggtitle("Borrelia spp. prevalence across elevation",
+            subtitle = "Color denotes plot") 
+```
+
+## Temporal variability
+
+Prevalence over time at the site scale is mostly stable, but it's difficult to be sure in this short of a time scale.
+
+```{r, echo = FALSE, warnings = FALSE, message = FALSE}
+# By year and site
+ggplot() +
+    geom_line(data=TickPathAgg %>% group_by(siteID, Year) %>%
+                  summarise(meanYearPrev = mean(Borrelia.Prev), fyear=first(Year)) %>%
+                  ungroup(), 
+              aes(x=fyear, y=meanYearPrev, colour=siteID), size=1) +
+    theme_tick() +
+    theme(legend.position = "none") +
+    labs(x="Year", y="Prevalence") +
+    ggtitle("Borrelia spp. prevalence by year",
+            subtitle = "Color denotes site") 
+```
+
+The plot scale shows a little more variability.
+
+```{r, echo = FALSE, warnings = FALSE, message = FALSE}
+# By year and plot
+ggplot() +
+    geom_line(data=TickPathAgg %>% group_by(plotID, Year) %>%
+                  summarise(meanYearPrev = mean(Borrelia.Prev), fyear=first(Year)) %>%
+                  ungroup(), 
+              aes(x=fyear, y=meanYearPrev, colour=plotID), size=1) +
+    theme_tick() +
+    theme(legend.position = "none") +
+    labs(x="Year", y="Prevalence") +
+    ggtitle("Borrelia spp. prevalence by year",
+            subtitle = "Color denotes plot")
+```
+
+Prevalence at the plot scale by month shows more variability, especially in the early and late tick season.
+
+```{r, echo = FALSE, warnings = FALSE, message = FALSE}
+# By month and plot
+ggplot() +
+    geom_line(data=TickPathAgg %>% group_by(plotID, Month) %>%
+        summarise(meanMonthPrev = mean(Borrelia.Prev), fmonth=first(Month)) %>%
+        ungroup(), 
+        aes(x=fmonth, y=meanMonthPrev, colour=plotID), size=1) +
+    theme_tick() +
+    theme(legend.position = "none") +
+    labs(x="Month", y="Prevalence") +
+    ggtitle("Borrelia spp. prevalence by month",
+            subtitle = "Color denotes plot") 
+```
+
+Plots are categorized by their dominate vegetation class into an NCLD class. *Borrelia* spp. is clearly most commonly found in deciduous forest but still shows lots of variation within it. Some NLCD classes have zero prevalence, but this is unsurprising when we consider what vegetation and small and large mammals might be there and how exactly transmission would occur.
+
+```{r, echo = FALSE, warnings = FALSE, message = FALSE}
+# By month and NLCD class
+ggplot() +
+    geom_line(data=TickPathAgg %>% group_by(nlcdClass, Month, plotID) %>%
+                  summarise(meanMonthPrev = mean(Borrelia.Prev), fmonth=first(Month),
+                            nlcd=first(nlcdClass), plot=first(plotID)) %>%
+                  ungroup(), 
+              aes(x=fmonth, y=meanMonthPrev, colour=plot), size=1) +
+    facet_wrap(~reorder(nlcd, desc(meanMonthPrev)), drop = FALSE) +
+    theme_tick() +
+    theme(legend.position = "none") +
+    labs(x="Month", y="Prevalence") +
+    ggtitle("Borrelia spp. prevalence across NLCD classes",
+            subtitle = "Color denotes plot") 
+```
+
+Contrary to tick abundance patterns, there is no peak in *Borrelia* spp. prevalence in mid-summer. Ticks have a two year life cycle, so it is likely that infected nymphs and adults are collected from the previous year in the early sampling season. Additionally, prevalence at the plot scale is extremely variable and likely dependent on vegetation structure, small mammal density, and large mammal minimum thresholds.
 
 
 
