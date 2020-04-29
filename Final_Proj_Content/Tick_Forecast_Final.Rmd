@@ -1,7 +1,7 @@
 ---
 title: "Tick Abundance and Borrelia Prevalence Forecasting"
 author: "M.Y. Chen, W.E. Moss, B.K. Hobart, M.E. Bitters"
-date: "4/26/2020"
+date: "4/29/2020"
 output:
   html_document:
     df_print: paged
@@ -30,32 +30,10 @@ library(ggplot2)
 library(stringr)
 library(RColorBrewer)
 library(caret)
+library(brms)
+library(boot) # for invlogit
+
 ```
-
-
-Basic Outline: (feel free to delete once filled in)
-
-### Scientific Background of Ixodes scapularis & Borrelia
-
-### Background on NEON sampling for ticks & Borrelia
-
-### Exploratory plots for tick distribution/abundance
-## Maps
-## Plots showing temporal component(s)
-## Plots showing NLCD trends
-## Plots showing data distribution
-
-### Exploratory plots for Borrelia distribution/prevalence
-## Maps
-## Plots showing temporal component(s)
-## Plots showing NLCD trends
-## Plots showing data distribution
-
-### Brief background on GAMs/BRMS
-
-### Modeling approach & results for ticks
-
-### Modeling approach & results for Borrelia
 
 ***
 
@@ -71,6 +49,7 @@ Lyme disease is the most common vector-borne disease in the U.S. and has been th
 Numerous aspects of the abiotic environment can control *I. scapularis* distribution and abundance, including temperature and humidity which jointly drive the risk of dessication. Yet, broad population patterns of *I. scapularis* most closely correlate with the distribution of forests because the most important hosts for both larvae/nymphs and adults (white-footed mice and deer, respectively) rely heavily on forested habitats. Within forested areas, temporal variability may be introduced by processes driving changes in host populations, most notably acorn masting patterns. There are thus temporal and spatial considerations *I. scapularis* presence and abundance.
 
 ### *Borrelia*
+
 *Borrelia* is vectored by ticks, with numerous reservoirs (though, most often small rodents). Tick eggs are virtually Borrelia-free---in other words the bacteria is not vertically transmitted. Tick larvae and nymphs may become infected with *Borrelia* when taking bloodmeals from infected reservoirs. Adult hosts (e.g., deer) tend not to be reservoirs for *Borrelia*, and thus host--parasite dynamics in this system are limited primarily to interactions involving larval or nymphal ticks and reservoir hosts. 
 
 Because larvae are never infected prior to their bloodmeal (and only take 1 bloodmeal), they cannot transmit *Borrelia* to hosts and thus pose little threat to humans. Conversely, if larvae become infected during their bloodmeal, successfully molt into a nymph, and take a bloodmeal from a susceptible host they can transmit the infection. Owing to this and their small size (~1 mm) nyphal ticks pose the largest threat to human health via transmission of *Borrelia*. Infected adult ticks may also transmit *Borrelia* to humans but are conspicuous and more easily removed.
@@ -94,7 +73,7 @@ Collected ticks are sent to external facilities for taxonomic identification at 
 # Tick Data Exploration
 
 ## Load data & set up
-```{r, warnings = FALSE, message = FALSE, include = FALSE}
+```{r, warning = FALSE, message = FALSE, include = FALSE}
 ## all domains
 # read.csv("complete_data_IXOSCA.csv") %>%
 #    filter(!is.na(rawCount)) -> tickAbund
@@ -145,10 +124,10 @@ north_america <- north_america[!(north_america$subregion %in% "Hawaii"),]
 ```
 
 
-We limited all analyses to *I. scapularis* nymphs, which are the primary vector of human Lyme and for which there were plentiful NEON data. Formal analyses (W.E.M.) used tick *density*, in which raw tick counts were scaled by drag length, but because drag lenghts were fairly consistent across space/time (see plot directly below) and because raw counts are easier to intepret than densities, the former is displayed in exploratory maps/plots below.
+We limited all analyses to *I. scapularis* nymphs, which are the primary vector of human Lyme and for which there were plentiful NEON data. Formal analyses (W.E.M.) used tick *density*, in which raw tick counts were scaled by drag length, but because drag lengths were fairly consistent across space/time (see plot directly below) and because raw counts are easier to intepret than densities, the former is displayed in exploratory maps/plots below.
 
 ## Survey Effort
-```{r, echo = FALSE, warnings = FALSE, message = FALSE}
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
 ggplot() +
    geom_line(data=tickAbund %>% filter(!is.na(rawCount)) %>%
                 group_by(siteID, month) %>%
@@ -167,10 +146,11 @@ ggplot() +
 ## Spatial variation in ticks
 
 A good starting place is to consider which NEON sites across the U.S. even have *I. scapularis* by plotting mean count per survey.
-```{r, echo = FALSE, warnings = FALSE, message = FALSE}
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
 ggplot() +
    geom_map(map=north_america, data=north_america,
-            aes(long, lat, map_id=region),
+            aes(map_id=region),
             colour="black", fill="gray80", size=.3) +
    ylim(c(25, 50)) +
    xlim(c(-125, -65)) +
@@ -189,14 +169,16 @@ ggplot() +
    ylab("")+
    ggtitle("Mean I. scapularis Count by Site")
 ```
+
 We can see that, largely, *I. scapularis* is restricted to east of the Mississippi River.
 
 
 Zooming in on the eastern half of the country, we can also see enormous plot-level variability in tick count per survey.
-```{r, echo = FALSE, warnings = FALSE, message = FALSE}
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
 ggplot() +
    geom_map(map=north_america, data=north_america,
-            aes(long, lat, map_id=region),
+            aes(map_id=region),
             colour="black", fill="gray80", size=.3) +
    ylim(c(25, 50)) +
    xlim(c(-95, -65)) +
@@ -218,7 +200,8 @@ ggplot() +
 
 
 Can also view the distribution of count data across these scales. First, let's look at domain-level.
-```{r, echo = FALSE, warnings = FALSE, message = FALSE}
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
 ggplot(data=tickAbund,
        aes(x=reorder(domainID, desc(rawCount)), y=rawCount)) +
    geom_flat_violin(position=position_nudge(x=0.2,y=0), alpha=0.8) +
@@ -232,10 +215,12 @@ ggplot(data=tickAbund,
    theme_tick() +
    ggtitle("By Domain")
 ```
+
 We can see that there are relatively few domains with *I. scapularis* and that there are some surveys that yielded extremely high nymph counts (~2500).
 
 If we next consider plots within domains, we can furher see that even where ticks are detected and sometimes abundant, most surveys still yield counts of 0.
-```{r, echo = FALSE, warnings = FALSE, message = FALSE}
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
 ggplot(data=filter(tickAbund, domainMax>0),
        aes(x=domainSite, y=rawCount)) +
    geom_flat_violin(position=position_nudge(x=0.2,y=0), alpha=0.8) +
@@ -253,10 +238,12 @@ ggplot(data=filter(tickAbund, domainMax>0),
    ggtitle("Site within Domain",
            subtitle = "Colour denotes domain")
 ```
+
 Note the x-axis range is restricted here to easier view the distribution of counts.
 
 The final scale of consideration is plots within sites, where we also see high levels of variation.
-```{r, echo = FALSE, warnings = FALSE, message = FALSE}
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
 ggplot(data=filter(tickAbund, domainMax>0),
        aes(x=domainSitePlot, y=rawCount)) +
    geom_flat_violin(position=position_nudge(x=0.2,y=0), alpha=0.8) +
@@ -282,10 +269,12 @@ Exercises like these lead to several decisions:
 
 
 ## Temporal variability
+
 As mentioned above, there are strong seasonal patterns in tick abundance owing to life cycle dynamics.
 
 Although some annual variation exists and should be accounted for, the most prominent feature of the data is the annual peak in *I. scapularis* nymphal abundance.
-```{r, echo = FALSE, warnings = FALSE, message = FALSE}
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
 ggplot() +
    geom_line(data=tickAbund %>% filter(domainMax>0) %>%
                 group_by(plotID, month) %>%
@@ -300,12 +289,14 @@ ggplot() +
            subtitle = "Colour denotes plot") +
    scale_x_continuous(breaks=c(2,4,6,8,10,12))
 ```
+
 This pattern raises several important points:
 (i) there is a pretty clear split between "tick season" and "non-tick season"
 (ii) there is a unimodal hump-shaped peak in nymph populations within that "tick season"
 
 Yet, we still see plot-level variability. One important consideration that ties back to spatial patterns is habitat. We can split this temporal plot out by different NLCD classes to see some important patterns.
-```{r, echo = FALSE, warnings = FALSE, message = FALSE}
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
 # WEM edited this to make run
 ggplot(data=tickAbund %>% filter(domainMax>0) %>%
                 group_by(nlcdClass, month, domainID) %>%
@@ -322,6 +313,7 @@ ggplot(data=tickAbund %>% filter(domainMax>0) %>%
            subtitle = "Colour denotes site") +
    scale_x_continuous(breaks=c(2,4,6,8,10,12))
 ```
+
 These results are cool and make a lot of sense! *I. scapularis* distribution is tightly linked to that of its forest-dwelling hosts. So in addition to broad, domain-scale distribution limits there are also very strong, local patterns of distribution and abundance.
 
 
@@ -329,7 +321,7 @@ These results are cool and make a lot of sense! *I. scapularis* distribution is 
 
 Just like with tick abundance, it is useful to look at where *Borrelia* spp. occurs across NEON sites. This analysis was restricted to *Borrelia burgdorferi*, *B. mayonii*, *B. burgdorferi* sensu lato, *B. miyamotoi*, and *B. lonestari* found in *Ixodes* spp. nymphs. We do not differentiate between individual species because they are all the causal agents of Lyme Disease in humans and use similar mechanisms to infect hosts.
 
-```{r, warnings = FALSE, message = FALSE, include = FALSE}
+```{r, warning = FALSE, message = FALSE, include = FALSE}
 # Read in data
 #TickPathIndiv <- read.csv("Tick_Pathogen_Individual.csv")
 #TickPathAgg <- read.csv("Tick_Borrelia_Prev_Aggregated.csv")
@@ -349,7 +341,7 @@ TickPathAgg <- readRDS("data/tickPrev_eda.Rdata")
 
 *Borrelia* spp. could theoretically inhabit any domain that has *Ixodes* ticks but is actually only present in a subset of domains. The upper Midwest and Northeast have the highest prevalence among domains where it occurs. 
 
-```{r, echo = FALSE, warnings = FALSE, message = FALSE}
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
 # mean prevalence by domain
 ggplot() +
     geom_map(map=north_america, data=north_america,
@@ -376,11 +368,11 @@ ggplot() +
 Just like with tick abundance, *Borrelia* spp. prevalence is variable at the site level within domains and at the plot level within sites. Even among domains or sites that are heavily invested with ticks, *Borrelia* spp. can remain absent at smaller scales. This is likely dominated by local characteristics at the plot scale (vegetation, microhabitats, microclimates) and density of small mammals and deer.
 
 
-```{r, echo = FALSE, warnings = FALSE, message = FALSE}
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
 # mean prevalence by site
 ggplot() +
     geom_map(map=north_america, data=north_america,
-             aes(long, lat, map_id=region),
+             aes(map_id=region),
              colour="black", fill="gray80", size=1) +
     ylim(c(25, 50)) +
     xlim(c(-95, -65)) +
@@ -400,11 +392,11 @@ ggplot() +
 ```
 
 
-```{r, echo = FALSE, warnings = FALSE, message = FALSE}
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
 # mean prevalence by plot
 ggplot() +
     geom_map(map=north_america, data=north_america,
-             aes(long, lat, map_id=region),
+             aes(map_id=region),
              colour="black", fill="gray80", size=1) +
     ylim(c(25, 50)) +
     xlim(c(-95, -65)) +
@@ -425,7 +417,7 @@ ggplot() +
 
 Elevation could influence occurrence and prevalence of *Borrelia* spp. by influencing vegetation and climate. At the plot level, it doesn't look like elevation is really important. Within a given elevation, there could be high or low prevalence. 
 
-```{r, echo = FALSE, warnings = FALSE, message = FALSE}
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
 # Elevation
 ggplot() +
     geom_point(data=TickPathAgg %>% group_by(plotID) %>%
@@ -443,7 +435,7 @@ ggplot() +
 
 Prevalence over time at the site scale is mostly stable, but it's difficult to be sure in this short of a time scale.
 
-```{r, echo = FALSE, warnings = FALSE, message = FALSE}
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
 # By year and site
 ggplot() +
     geom_line(data=TickPathAgg %>% group_by(siteID, Year) %>%
@@ -459,7 +451,7 @@ ggplot() +
 
 The plot scale shows a little more variability.
 
-```{r, echo = FALSE, warnings = FALSE, message = FALSE}
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
 # By year and plot
 ggplot() +
     geom_line(data=TickPathAgg %>% group_by(plotID, Year) %>%
@@ -475,7 +467,7 @@ ggplot() +
 
 Prevalence at the plot scale by month shows more variability, especially in the early and late tick season.
 
-```{r, echo = FALSE, warnings = FALSE, message = FALSE}
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
 # By month and plot
 ggplot() +
     geom_line(data=TickPathAgg %>% group_by(plotID, Month) %>%
@@ -491,14 +483,13 @@ ggplot() +
 
 Plots are categorized by their dominate vegetation class into an NCLD class. *Borrelia* spp. is clearly most commonly found in deciduous forest but still shows lots of variation within it. Some NLCD classes have zero prevalence, but this is unsurprising when we consider what vegetation and small and large mammals might be there and how exactly transmission would occur.
 
-```{r, echo = FALSE, warnings = FALSE, message = FALSE}
-# By month and NLCD class
-ggplot() +
-    geom_line(data=TickPathAgg %>% group_by(nlcdClass, Month, plotID) %>%
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+# By month and NLCD class-- altered MYC to run
+ggplot(TickPathAgg %>% group_by(nlcdClass, Month, plotID) %>%
                   summarise(meanMonthPrev = mean(Borrelia.Prev), fmonth=first(Month),
                             nlcd=first(nlcdClass), plot=first(plotID)) %>%
-                  ungroup(), 
-              aes(x=fmonth, y=meanMonthPrev, colour=plot), size=1) +
+                  ungroup()) +
+    geom_line(aes(x=fmonth, y=meanMonthPrev, colour=plot), size=1) +
     facet_wrap(~reorder(nlcd, desc(meanMonthPrev)), drop = FALSE) +
     theme_tick() +
     theme(legend.position = "none") +
@@ -514,6 +505,7 @@ Contrary to tick abundance patterns, there is no peak in *Borrelia* spp. prevale
 # Tick Abundance Models
 
 ## Modeling approach
+
 Our goal was to build a model that could be used to predict and understand tick abundances at NEON sites. We investigated several modeling approaches including state-space time series, variance partitioning, boosted regression trees, generalized linear mixed models, and generalized additive models. We ultimately proceeded with GAMs due to their ability to handle the non-linear, temporal element of our data and their flexibility in response variable. 
 
 One major challenge to modeling tick abundances (specifically, the densities of Ixodes nymphs) was the extreme zero-inflation in our data (as explored above). To handle this, we used zero-inflated poisson models. These models have two parts, one to predict the probability of 0s (the zero inflation model), and one to predict the counts (poisson model). 
@@ -636,7 +628,7 @@ summary(zip6)
 In order to better extract uncertainty estimates, we can fit the best model in `brms` which will give posterior distributions of parameters. 
 
 Note that if you want to run this model you will have to manually change the code below; otherwise, it reads in an existing model object. 
-```{r, warnings = FALSE, message = FALSE}
+```{r, warning = FALSE, message = FALSE}
 run.mod <- "no" # change this if you want to run the model 
 # warning that running it takes a long time (e.g. hours)!
 if(run.mod == "yes"){
@@ -811,7 +803,7 @@ Yes; 2018 seems like a weird year in terms of low densities, explaining why the 
 In future models, year-level covariates could be useful in making predictions; e.g. perhaps 2018 is a low mammal year or has a climate not favorable for nymph recruitment. 
 
 Plot predictions vs. actuals for plots that sometimes have ticks. Predictions are in blue, actuals are in red.
-```{r, echo = FALSE, warnings = FALSE}
+```{r, echo = FALSE, warning = FALSE}
 # take a look at predictions for just those plots that *sometimes* have ticks
 
 abun %>% filter(totalTicks_plot>0) %>% pull(plotID) %>% unique() %>% as.character() ->  positive.plots
@@ -842,7 +834,7 @@ abun %>% filter(plotID %in%  positive.plots[26:49], year == 2018, plotID %in% ny
    ylab("Nymph count")+
    scale_color_manual(values = c("dodgerblue", "coral", "black"))
    
-rm(bad_preds, good_preds, plotMeans)
+rm(bad_preds, good_preds)
 
 ```
 
@@ -852,7 +844,649 @@ Overall, the model does better at presence/absence than abundance. However, the 
 
 There is a lot of variation among plots. Right now, this is a random effect and if we had previous years of data, we were fairly good at predicting presence/absence at a plot in the next year. But what if we wanted to predict entirely new plots? Right now, the only informative covariates are day of year and nlcd. The uncertainty on the nlcd classes is large. Therefore, if we want to predict what will happen at NEW plots, we need a lot more plot-level and year-level information. This would be useful not only in predictions, but also in understanding mechanism; right now we know very little about why some plots have high tick densities. 
 
-Future models could incorporate small mammal density, litter, and other plot-year level information to make predictions. T
+Future models could incorporate small mammal density, litter, and other plot-year level information to make predictions. 
 
-# Borrelia Prevalence Models
-*Melissas stuff will go here
+# *Borrelia* Prevalence Models
+
+The second goal is to be able to predict *Borrelia* prevalence. The first thing we do is plot all *Borrelia* data across time and plot to assess the distribution of *Borrelia*.
+
+```{r warning=FALSE, message=FALSE, include=FALSE}
+# # Load raw data
+# tck <- read.csv("MASTER_all_tck_data_merged.csv")
+# tck_allsamples_borr <- tck %>%
+#   mutate(tested=ifelse(is.na(Borrelia_sp.),0,1) # Was each tick  ever tested for borrellia?
+#          ,isPositive=ifelse(Borrelia_sp.=="Positive", 1,0) # And if it was tested, was it positive or negative?
+#   ) %>% 
+#   group_by(domainID, siteID, nlcdClass, plotID, elevation, collectDate, dayOfYear, year, month, totalSampledArea) %>% # collapse by sample-- summing all tck counts together
+#   summarize(numberTested=sum(tested, na.rm=TRUE) # number of tested ticks in that sample
+#             ,n=n() # total ticks in that sample
+#             , numberPositive=sum(isPositive,na.rm = TRUE) # number of positive ticks in that sample
+#             , nAdult=sum(lifeStage=="Adult")
+#             , nNymph=sum(lifeStage=="Nymph")
+#             , nLarva=sum(lifeStage=="Larva")) %>%
+#   ungroup() %>%
+#   mutate(proportionTested=numberTested/nNymph # proportion of all nymph ticks tested-- only nymphs were ever tested.
+#          , proportionPositive=numberPositive/numberTested
+#          , tested = ifelse(numberTested > 0 , TRUE, FALSE) # new true/false tested, which is summed across ticks
+#          , testingStatus = ifelse(numberTested > 0, "Tested", ifelse(nNymph>0, "Nymphs present, not tested", "No nymphs"))
+#          ) %>%
+#   mutate(nlcdClass=factor(nlcdClass, levels=c("emergentHerbaceousWetlands","cultivatedCrops","pastureHay","grasslandHerbaceous"
+#                                               ,"dwarfScrub","shrubScrub","sedgeHerbaceous"
+#                                               ,"woodyWetlands","deciduousForest","evergreenForest","mixedForest"))) %>%
+#   mutate(borrPresent = ifelse(numberPositive>0,1,0)
+#          , domainID = factor(as.character(domainID))
+#          , siteID = factor(as.character(siteID))
+#          , plotID = factor(as.character(plotID))
+#          , year = factor(year)
+#          , tckDensity = sum(c(nLarva, nNymph, nAdult))/totalSampledArea
+#          , ntckDensity = nNymph/totalSampledArea
+#          , NLtckDensity = sum(c(nNymph, nAdult), na.rm = TRUE)/totalSampledArea
+#          , atckDensity = nAdult/totalSampledArea)  %>%
+#   mutate(lognymphDensity=log(ntckDensity)
+#          , logNLtckDensity=log(NLtckDensity)
+#          , logtckDensity = log(tckDensity)
+#          , logadultDensity=log(atckDensity))
+# save(tck_allsamples_borr, file = "data/tck_allsamples_borr.RData")
+
+# Load all borrelia data
+load("data/tck_allsamples_borr.RData")
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+## Plot over time, by year, by plot, to see how zero-inflated it is.
+tck_allsamples_borr %>%
+  ggplot() + geom_point(aes(x=dayOfYear, y=plotID, fill=proportionPositive, col=testingStatus), pch=21) +
+  scale_fill_gradient(low="white", high="darkred") +
+  scale_color_manual(values=c(Tested="blue", `Nymphs present, not tested`="grey", `No nymphs`="white")) +
+  facet_grid(.~year)
+```
+
+
+There are many samples where nymphs were present, but they were never tested for *Borrelia*. Additionally, there are also many samples where they tested for *Borrelia*, but there were no positive individuals. Therefore, we should filter all these out.
+
+``` {r echo =FALSE}
+## Let's filter out any samples that never tested any positive Borrelia
+infectedPlots <- tck_allsamples_borr %>%
+  filter(numberTested>0) %>%
+  select(plotID) %>%pull() %>% unique()
+tck_borrelia <- tck_allsamples_borr %>%
+  # filter(plotID %in% infectedPlots) %>%
+  mutate(numberPositive=ifelse(numberTested==0,NA,numberPositive)) %>% # Make sure that numberPositive is not artificially zero-- if there were no tests, it should be NA
+  filter(numberTested!=0)
+# There are some samples that didn't test most of the nymphs; so we remove these
+tck_borrelia_adj <- tck_borrelia %>%
+  filter(abs(nNymph-numberTested)<3) # HARV_004 is the only site that differs nNymph and numberTested by more than 3
+nrow(tck_borrelia_adj)
+```
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+tck_borrelia_adj %>%
+  ggplot() + geom_point(aes(x=dayOfYear, y=plotID, fill=proportionPositive, col=testingStatus), pch=21) +
+  scale_fill_gradient(low="white", high="darkred") +
+  scale_color_manual(values=c(Tested="blue", `Nymphs present, not tested`="grey", `No nymphs`="white")) +
+  facet_grid(.~year)
+```
+
+The data are still very zero-inflated, but much more manageable now. We also take a cursory look at how prevalence and infection rates differ across time (`dayOfYear`).
+
+```{r echo = FALSE, warning=FALSE, message=FALSE}
+# dayOfYear vs borrelia
+tck_borrelia_adj %>%
+  ggplot() +
+  geom_segment(aes(x=dayOfYear,xend=dayOfYear,y=0, yend=log(nNymph/totalSampledArea+1)), col="grey") +
+  geom_point(aes(x=dayOfYear, y=proportionPositive*max(log(numberPositive+1))), col="red", alpha=0.75)+ geom_point(aes(x=dayOfYear, y=log(numberPositive+1)))+
+  scale_y_continuous(sec.axis=sec_axis(trans=~./max(log(tck_borrelia_adj$numberPositive)+1), name="Proportion positive"))+
+  theme_bw()+
+  theme(axis.title.y.right = element_text(color="red")
+        , plot.caption = element_text("Grey bars indicate log(nymph counts + 1).")
+        , plot.title = element_text("Borrelia prevalence (raw and proportional) throughout the year")) + 
+  ylab("log (Number positive +1)") 
+
+
+```
+
+```{r echo = FALSE, warning=FALSE, message=FALSE}
+# dayOfYear vs borrelia
+tck_borrelia_adj %>%
+  ggplot() +geom_smooth(aes(x=dayOfYear, y=proportionPositive, col=year),se = FALSE)+ ylab("Proportion positive") 
+```
+
+
+## Modelling approach:
+
+Challenges of dataset:
+
+* Strongly zero-inflated-- needs a two-part model (hurdle or zero-inflated)
+* Non-linear relationships between response and predictors-- may need splines
+* Complexity of non-linear predictors and zero-inflated data means Bayesian methods are extremely slow (e.g. BRMS)- should do EDA and possible model selection in a non-bayesian space
+
+The steps we want to take are:
+
+* Split data into test and training sets
+* Fit two separate spline-based non-bayesian models (GAMs) to the training set (prevalence amongst plots vs prevalence amongst ticks) and do model selection
+* Use the test set to assess our ability to predict future *Borrelia* risk
+
+Future directions:
+
+* Translate best-fit GAMs into in Bayesian space (actually quite straight forward in BRMS)
+* Use Bayesian model to propogate uncertainty in coefficients to better understand uncertainty in predictions-- to do this with splines is a little tricky.
+* Combine the two-component model we've created here into a single "zero-inflated" model-- there are more possibilities in the brms package than the GAM package. Specifically, we are looking for a zero-inflated binomial.
+
+
+Our first challenge is the large number of zeros in the dataset. We should use some sort of zero-inflated or hurdle model-- however, the GAM package does not allow zero-inflated binomial models and convergence of Bayesian models (in BRMS) is slow in such a complex model. Thus, we make the decision here to model the prevalence of *Borrelia* amongst plots separately from the prevalence amongst ticks. In the future, we will likely combine these into a single bayesian model, but here we keep them separate due to time restraints.
+
+Additionally, for prediction, we find that *Borrelia* prevalence is extremely variable between years. Therefore, we are partially interested in whether we can predict *Borrelia* prevalence if we know something about the tick season early in the year. From a risk assessment point of view-- is there a particular point in the year that we should begin sampling to best inform our risk assessment for the rest of the year? 
+
+The test set is year 2017, which is the last year for which we have *Borrelia* data. The training set is years 2014-2016.
+
+```{r echo =FALSE}
+#### Subsetting data into training and testing sets ####
+## Get only 2014-2016 data for training
+tck_borrelia_train <- tck_borrelia_adj %>% filter(year!=2017)
+# Filter test dataset so we only have relevant plots in training
+inclPlots <- as.character(unique(tck_borrelia_train$plotID))
+# make testing set with same plots
+tck_borrelia_test <- tck_borrelia_adj %>% filter(year==2017, plotID %in% inclPlots)
+```
+.
+
+```{r echo =FALSE}
+## Subsetting multiple time subsets
+subsetData <- list() 
+daysIn2017 <- tck_borrelia_adj %>% filter(year==2017, plotID %in% c(inclPlots)) %>% select(dayOfYear) %>% pull() %>% unique() %>% sort()
+for ( doy in daysIn2017 ) {
+  subsetData[[paste(doy)]] <- list()
+  subsetData[[paste(doy)]][['train']] <- tck_borrelia_adj %>% filter(!(year==2017 & dayOfYear>=doy), plotID %in% inclPlots) %>% mutate(year=factor(year))
+  subsetData[[paste(doy)]][['test']] <- tck_borrelia_adj %>% filter((year==2017 & dayOfYear>=doy), plotID %in% inclPlots)%>% mutate(year=factor(year))
+}
+```
+
+### Part I: Fitting the "hurdle" component of our model
+
+To help model selection, we wrote a custom script to extract AIC and Deviance explained values from different combinations of predictors. This function is similar to "stepAIC", so we've named it "stepGAM". 
+
+```{r, include=FALSE}
+source("msc_code/scripts_tckpathogen.R")
+```
+
+We iterate through all combinations of predictors to see what combination comes out as the "best fit"
+
+```{r}
+#### Part I: binomial hurdle component ####
+# First, model a binomial component using training set
+allPred <- c("s(dayOfYear)","nlcdClass","s(elevation)"
+             ,"s(logNLtckDensity)","s(logadultDensity)","s(lognymphDensity)"
+             ,"s(plotID, bs='re')", "s(plotID, dayOfYear, bs='re')"
+             ,"s(year, bs='re')", "s(year, dayOfYear, bs='re')"
+             , "domainID", "s(domainID, bs='re')"
+)
+
+if (!file.exists("model_objects/allAIC.RData")) {
+  allAIC <- stepGAM(dat = tck_borrelia_train, predictors = allPred, response = "borrPresent", constant_pred = "offset(log(numberTested))", family = binomial, ignore.combos=list(c("domainID","s(domainID, bs='re')"), c("s(logNLtckDensity)","s(logadultDensity)","s(lognymphDensity)")                                                                                                                                                                 , c("s(logNLtckDensity)","s(logadultDensity)"),c("s(logNLtckDensity)","s(lognymphDensity)")))
+  save(allAIC, file="model_objects/allAIC.RData")
+
+} else {
+  load("model_objects/allAIC.RData")
+}
+```
+
+The output is a table, showing all the different models attempted.
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+allAIC_filt <- allAIC %>% filter(!is.na(AIC)) %>% arrange(AIC) %>%mutate(rank=seq(1:length(AIC))) %>% 
+    mutate(AIC=as.numeric(AIC)
+           , Dev.expl = as.numeric(Dev.expl)
+           , REML = as.numeric(REML)) %>%
+    filter(AIC<500)
+ 
+allAIC %>%
+  select(AIC, REML, Dev.expl, formula) %>%
+  as_tibble()
+```
+Now, we can look at how AIC changes when ranked from best model to least
+
+```{r echo = FALSE}
+  ggplot(allAIC_filt) +geom_line(aes(x=rank, y=AIC))+
+  geom_line(aes(x=rank, y=Dev.expl*(max(AIC))), col="red", alpha=0.2) + scale_y_continuous(sec.axis=sec_axis(~./(max(allAIC_filt$AIC)), name="Deviance Explained")) +
+  theme(axis.title.y.right = element_text(colour = "red"))
+```
+
+``` {r echo=FALSE}
+# Compare AIC for models with and without each predictor
+allAIC_filt %>% gather(-c(AIC, REML, Dev.expl, formula,rank), key=Predictor, value=WithPredictor) %>% 
+  select(AIC, REML, Dev.expl, Predictor, WithPredictor) %>%
+  mutate(WithPredictor = ifelse(WithPredictor==0, FALSE, TRUE)) %>%
+  ggplot() + geom_violin(aes(x=WithPredictor, y=AIC))  +  facet_wrap(.~Predictor) 
+
+```
+
+At this point, we can filter the models to the "best" AIC and Deviance explained models and play around with the parameters, or adjust them as needed. For brevity, we won't go through our (tedious) manual model selection process. Instead, we will simply say that we decided the "best Deviance explained" model appeared to have the highest prediction accuracy with the most sensible predictors, so that is what we choose as our "best fit" model. 
+```{r}
+frml_bin1_bestAIC <- allAIC_filt[allAIC_filt$AIC==min(allAIC_filt$AIC),"formula"]
+frml_bin1_bestDevexpl <- allAIC_filt[allAIC_filt$Dev.expl==max(allAIC_filt$Dev.expl),"formula"]
+
+frml_bin1_bestAIC
+frml_bin1_bestDevexpl
+```
+
+```{r}
+## FINAL MODEL:
+frml.bin1 <- frml_bin1_bestDevexpl
+mod.gambin<- gam(as.formula(frml.bin1)
+                 , data=tck_borrelia_train
+                 , method="REML"
+                 , family=binomial)
+gam.check(mod.gambin)
+plot(mod.gambin, scale=0, pages=1)
+mean((predict(mod.gambin, type = "response")>0.5) == tck_borrelia_train$borrPresent)
+```
+
+For further diagnostics, we want to see if incorrectly predicted results are due to extremely low  *Borrelia* intensity-- that is, perhaps a sample that predicted a false negative did so because the amount of *Borrelia* in that plot was actually really low.
+
+```{r echo=FALSE}
+# Of those where they predicted presence/absence incorrectly, how "far" were they off? 
+# Ideally, you have a positive correlation between proportion positive and predicted probability. "Errors" should be negatively correlated with small sample size-- that is, very "wrong" predictions should be a result of small sample size
+tck_borrelia_train %>%
+  mutate(pred =as.numeric(plogis(predict(mod.gambin)))
+         ,Correctly_Predicted =((pred>0.5) == tck_borrelia_train$borrPresent) ) %>%
+  ggplot() +geom_point(aes(x=proportionPositive, y=pred, col=Correctly_Predicted, cex=log(numberTested))) + ylab("Predicted probability") +xlab("Observed Proportion Infected") 
+```
+
+
+```{r}
+# Is there a bias for predicting negative or positive results?
+tck_borrelia_train %>%
+  mutate(predictedProbability =as.numeric(plogis(predict(mod.gambin)))
+         , predicted_status = (predictedProbability>0.5)
+         , observed_status=borrPresent) %>%
+  select(observed_status,predicted_status) %>% table()
+4/(115+4) # False positive rate
+13/(13+44) # False negative rate
+# The false negative rate is actually a lot higher than the false positive rate. 
+# This means, on average, more samples are positive then you'd expect, given the model.
+```
+
+```{r}
+confusionMatrix(tck_borrelia_train %>%
+  mutate(predictedProbability =as.numeric(plogis(predict(mod.gambin)))
+         , predictedPA = as.numeric(predictedProbability>0.5)) %>%
+  select(borrPresent,predictedPA) %>% table())
+```
+The Detection rate is actually pretty poor here-- we are pretty good and predicting when there will not be Borrelia, but not very good and predicting when there is Borrelia. Sadly, this is the opposite of what we want to know!
+
+Now, we move onto predicting Borrelia Prevalence-- fist, we must filter dataset to exclude "hurdle" zeros in order to fit the prevalence aspect of the model.
+
+```{r}
+tck_borrelia_filtBin <- tck_borrelia_train %>%
+  mutate(pred=predict(mod.gambin, type="response")) %>%
+  filter((borrPresent>0 | pred > 0.5))
+```
+
+## Part II: Borrelia Prevalence component
+As before, we fit many different models and extract the AIC and Deviance explained by each.
+```{r}
+# make year a factor
+tck_borrelia_filtBin <- tck_borrelia_filtBin %>%
+  mutate(year=factor(year))
+
+allPred2 <- c("s(dayOfYear, sp=1)","nlcdClass","s(elevation)"
+             ,"s(logNLtckDensity, sp=1)","s(logadultDensity, sp=1)","s(lognymphDensity, sp=1)"
+             ,"s(plotID, bs='re')", "s(plotID, dayOfYear, bs='re')"
+             ,"s(year, bs='re')", "s(year, dayOfYear, bs='re')"
+             , "domainID", "s(domainID, bs='re')"
+)
+ignoreCombos <- list(c("domainID","s(domainID, bs='re')")
+                     , c("s(logNLtckDensity, sp=1)","s(logadultDensity, sp=1)","s(lognymphDensity, sp=1)")
+                     , c("s(logNLtckDensity, sp=1)","s(lognymphDensity, sp=1)")
+                     , c("s(logNLtckDensity, sp=1)","s(logadultDensity, sp=1)")
+)
+
+if ( !file.exists("model_objects/allAIC_2.RData") ) {
+  allAIC_2 <- stepGAM(dat=tck_borrelia_filtBin, predictors = allPred2, response = "cbind(numberPositive,numberTested)", family = binomial, ignore.combos=ignoreCombos)
+  
+  save(allAIC_2, file="model_objects/allAIC_2.RData")
+  } else {
+  load("model_objects/allAIC_2.RData")
+  }
+```
+
+Then, we look at the distribution of AIC and Deviance explained values over ranked models
+```{r echo =FALSE}
+allAIC_2_filt <- allAIC_2 %>% filter(!is.na(AIC)) %>%  
+    mutate(AIC=as.numeric(AIC)
+           , Dev.expl = as.numeric(Dev.expl)
+           , REML = as.numeric(REML)) %>%
+    arrange(AIC) %>%mutate(rank=seq(1:n())) %>%
+    filter(AIC<2000)
+allAIC_2_filt %>% 
+  ggplot() +geom_line(aes(x=rank, y=AIC))+
+  geom_line(aes(x=rank, y=Dev.expl*(max(AIC))), col="red", alpha=0.2) + scale_y_continuous(sec.axis=sec_axis(~./(max(allAIC_2_filt$AIC)), name="Deviance Explained")) +
+  theme(axis.title.y.right = element_text(colour = "red"))
+```
+
+And the importance of particular predictors
+
+``` {r echo = FALSE}
+# Compare AIC for models with and without each predictor
+allAIC_2_filt %>% gather(-c(AIC, REML, Dev.expl, formula, rank), key=Predictor, value=WithPredictor) %>%
+  select(AIC, REML, Dev.expl, Predictor, WithPredictor) %>%
+  mutate(WithPredictor = ifelse(WithPredictor==0, FALSE, TRUE)) %>%
+  ggplot() + geom_violin(aes(x=WithPredictor, y=AIC))  +  facet_wrap(.~Predictor)
+```
+
+``` {r}
+frml_bin2_bestAIC <- allAIC_2_filt[allAIC_2_filt$AIC==min(allAIC_2_filt$AIC),"formula"]
+frml_bin2_bestDevexpl <- allAIC_2_filt[allAIC_2_filt$Dev.expl==max(allAIC_2_filt$Dev.expl),"formula"]
+
+frml_bin2_bestAIC
+frml_bin2_bestDevexpl
+```
+
+Again, we don't show the tedious work of looking through models and predictors; rather we choose the "best AIC model" as our model and show results from just that. 
+
+```{r}
+### BEST MODEL:
+frml.bin2 <- frml_bin2_bestAIC
+mod.gambin_2 <- gam(as.formula(frml.bin2)
+                    , data=tck_borrelia_filtBin
+                    , method="REML"
+                    , family=binomial)
+summary(mod.gambin_2)
+gam.check(mod.gambin_2)
+# Residuals
+plot(mod.gambin_2$residuals ~ mod.gambin_2$fitted.values, ylab="Residuals",xlab="Fitted values")
+
+plot(mod.gambin_2, pages=1)
+
+
+```
+
+
+## Part III: Predicting 2017
+
+Now that we have selected the best-fit models for *Borrelia* presence/absence and prevalence, the next step is to try to predict *Borrelia* for the year 2017. Below, we interate through all test/train splits (using every new sampling day as a new DOY "cutoff" point) to see if prediction accuracy increases if we have more data on that year
+
+```{r}
+if ( !file.exists("model_objects/predictions_over_doy.RData")) {
+  predictions_over_doy_unprocessed <- data.frame(matrix(ncol=35, dimnames = list(NULL, c("pred_type","pred_bin","pred_bin2","se","se2","doy_cutoff",colnames(tck_borrelia_test)))))
+pb <- txtProgressBar(title = "progress bar", min = 0,
+                     max = length(daysIn2017), style=3)
+
+for ( i in 1:length(daysIn2017) ) {
+  doy <- daysIn2017[i]
+  tempTrain <- subsetData[[paste0(doy)]][['train']]
+  tempTrain2017 <- tempTrain %>% filter(year==2017) %>% arrange(dayOfYear)
+  tempTest <- subsetData[[paste0(doy)]][['test']]
+  ### Part I: Presence/absence
+  tempFit <- gam(as.formula(frml.bin1), data=tempTrain, family = binomial(), method = "REML")
+  tempNewPredict <- predict(tempFit, newdata = tempTest, type = "link", se.fit = TRUE)
+  tempOldPredict <- predict(tempFit, newdata = tempTrain2017, type="link", se.fit = TRUE)
+  tempTrainPredict <- predict(tempFit, type='link', se.fit=TRUE)
+  ### Part II: prevalence
+  # Filter trainig dataset to exclude zeros
+  tempTrain2 <- tempTrain %>%
+    cbind(data.frame(pred_bin1=tempTrainPredict$fit)) %>%
+    filter(pred_bin1>0.5 | borrPresent>0)
+  
+  tempFit2 <- gam(as.formula(frml.bin2), data=tempTrain2, family = binomial(), method = "REML")
+  tempNewPredict2 <- predict(tempFit2, newdata = tempTest, type = "link", se.fit = TRUE)
+  tempOldPredict2 <- predict(tempFit2, newdata = tempTrain2017, type="link", se.fit = TRUE)
+  ### Tracking progress
+  Sys.sleep(0.1)
+  setTxtProgressBar(pb, i, label=paste( round(i/length(daysIn2017)*100, 0),
+                                        "% done"))
+  ### Store predictions
+  predictions_over_doy_unprocessed <-rbind(predictions_over_doy_unprocessed, cbind(data.frame(pred_type=c(rep("train_pred",length(tempOldPredict$fit)),rep("test_pred",length(tempNewPredict$fit)))
+                                                                      , pred_bin=c(tempOldPredict$fit, tempNewPredict$fit)
+                                                                      , pred_bin2=c(tempOldPredict2$fit, tempNewPredict2$fit)
+                                                                      , se = c(tempOldPredict$se.fit, tempNewPredict$se.fit)
+                                                                      , se2 = c(tempOldPredict2$se.fit, tempNewPredict2$se.fit)
+                                                                      , doy_cutoff = rep(doy, nrow(tck_borrelia_test))
+  ),rbind(tempTrain2017,tempTest)))
+}
+
+predictions_over_doy <- predictions_over_doy_unprocessed %>%
+  filter(!is.na(pred_bin))
+save(predictions_over_doy,"model_objects/predictions_over_doy.RData")
+} else {
+  load("model_objects/predictions_over_doy.RData")
+}
+
+```
+
+``` {r echo =FALSE, message=FALSE, warning=FALSE}
+# Summarize some MSE stats
+MSE_summary <- predictions_over_doy %>%
+  mutate(ressq_bin = (inv.logit(pred_bin)-borrPresent)^2
+         , ressq_bin2 = (inv.logit(pred_bin2)-proportionPositive)^2
+         , predCount_bin2 = inv.logit(pred_bin2)*numberTested
+         , ressq_countbin2 = (inv.logit(predCount_bin2)-numberPositive)^2) %>%
+  group_by(pred_type, doy_cutoff) %>%
+  summarize(MSE_bin=sum(ressq_bin)/n()
+            , MSE_bin2=sum(ressq_bin2)/n()
+            , MSE_countbin2= sum(ressq_countbin2)/n()
+            , predAve_bin = sum(borrPresent)/n()
+            , predAve_bin2 = mean(inv.logit(pred_bin2))
+            , predAveCount_bin2 = mean(inv.logit(predCount_bin2))) %>%
+  ungroup()
+## Get number of correct in predictions
+summedCorrect <- predictions_over_doy %>%
+  mutate(pred_borrPresent=ifelse(inv.logit(pred_bin)>0.5,1,0)
+         , correct = borrPresent==pred_borrPresent
+         , falsePositive = ifelse(borrPresent==0 & pred_borrPresent==1, 1, 0)
+         , falseNegative = ifelse (borrPresent==1 & pred_borrPresent==0,1,0)) %>%
+  group_by(doy_cutoff, pred_type) %>%
+  summarize(nCorrect = sum(correct, na.rm=TRUE)
+            , nFPositive = sum(falsePositive, na.rm=TRUE)
+            , nFNegative = sum(falseNegative, na.rm=TRUE)
+            , n = n()) %>%
+  mutate(propCorrect = nCorrect/n
+         , propFPositive = nFPositive/n
+         , propFNegative = nFNegative/n)
+
+```
+
+Below, we plot the MSE (mean squared error) of test and train set predictions (for 2017 only) on Borrelia presence/absence as we increase DOY cutoff . Superimposed, I've also included the real observed data to see where *Borrelia* peaks, and whether we can predict *Borrelia* risk of the year before risk actually peaks.
+
+```{r echo =FALSE, warning=FALSE, message=FALSE}
+summedCorrect %>%
+  mutate(dayOfYear_cutoff = as.Date(doy_cutoff, origin = "2017-01-01")
+         , month = month(dayOfYear_cutoff)
+         , Predictions_for = ifelse(pred_type=="test_pred","Test set","Train set")) %>%
+  ggplot() + geom_line(aes(x=dayOfYear_cutoff, y=propCorrect, col=Predictions_for))+
+  scale_color_manual(values=c("blue","black"))+
+  scale_y_continuous(sec.axis = sec_axis(trans=~(.-0.5)*2, name = "Borrelia presence/absence"), limits=c(0.5,1)) +
+  geom_point(data=tck_borrelia_test, aes(x=as.Date(dayOfYear, origin = "2017-01-01"), y=as.numeric(borrPresent)/2+0.5), col="red") +
+  geom_smooth(data=tck_borrelia_test, aes(x=as.Date(dayOfYear, origin = "2017-01-01"), y=borrPresent/2+0.5), col="red") +
+    theme(axis.title.y.right = element_text(colour = "red")) +ylab("Proportion predicted correct") 
+
+```
+
+We can split up the "error" of this binomial model into false positives and false negatives too.
+
+```{r echo=FALSE}
+summedCorrect %>%
+  mutate(dayOfYear_cutoff = as.Date(doy_cutoff, origin = "2017-01-01")
+         , month = month(dayOfYear_cutoff)
+         , Predictions_for = ifelse(pred_type=="test_pred","Test set","Train set")) %>%
+  ggplot() + geom_point(aes(x=dayOfYear_cutoff, y=propFPositive, col=Predictions_for))+
+  scale_color_manual(values=c("blue","black"))+
+  scale_y_continuous(sec.axis = sec_axis(trans=~.*5, name = "Borrelia presence/absence")) +
+  geom_point(data=tck_borrelia_test, aes(x=as.Date(dayOfYear, origin = "2017-01-01"), y=as.numeric(borrPresent)/5), col="red") +
+  geom_smooth(data=tck_borrelia_test, aes(x=as.Date(dayOfYear, origin = "2017-01-01"), y=borrPresent/5), col="red") +
+    theme(axis.title.y.right = element_text(colour = "red")) +ylab("False positive rate") 
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+summedCorrect %>%
+  mutate(dayOfYear_cutoff = as.Date(doy_cutoff, origin = "2017-01-01")
+         , month = month(dayOfYear_cutoff)
+         , Predictions_for = ifelse(pred_type=="test_pred","Test set","Train set")) %>%
+  ggplot() + geom_point(aes(x=dayOfYear_cutoff, y=propFNegative, col=Predictions_for))+
+  scale_color_manual(values=c("blue","black"))+
+  scale_y_continuous(sec.axis = sec_axis(trans=~.*2, name = "Borrelia presence/absence"), limits=c(0,0.5)) +
+  geom_point(data=tck_borrelia_test, aes(x=as.Date(dayOfYear, origin = "2017-01-01"), y=as.numeric(borrPresent)/2), col="red") +
+  geom_smooth(data=tck_borrelia_test, aes(x=as.Date(dayOfYear, origin = "2017-01-01"), y=borrPresent/2), col="red") +
+    theme(axis.title.y.right = element_text(colour = "red")) +ylab("False negative rate") 
+
+```
+
+It seems the false positive rate actually greatly improves once you start sampling in May. Unfortunately, the false negative rate is generally the more important "error" term, since we don't want to accidently report "low risk", but experience a "high risk" year.
+
+
+
+Next, we look at the errors in predictions for prevalence amongst tick within plot. Again, we do not see a meaningful drop in MSE as we increase the cutoff date for predicting the rest of the year. 
+
+```{r echo =FALSE, warning=FALSE, message=FALSE}
+## Binomial 2- proportions
+MSE_summary %>%
+  mutate(dayOfYear_cutoff = as.Date(doy_cutoff, origin = "2017-01-01")
+         , month = month(dayOfYear_cutoff)
+         , Predictions_for = ifelse(pred_type=="test_pred","Test set","Train set")) %>%
+  ggplot() + geom_line(aes(x=dayOfYear_cutoff, y=MSE_bin2, col=Predictions_for)) +
+  scale_color_manual(values=c("blue","black"))+
+  geom_point(data=tck_borrelia_test, aes(x=as.Date(dayOfYear, origin = "2017-01-01"), y=proportionPositive/5), col="red") +
+  geom_smooth(data=tck_borrelia_test, aes(x=as.Date(dayOfYear, origin = "2017-01-01"), y=proportionPositive/5), col="red") +
+  scale_y_continuous(sec.axis = sec_axis(trans=~.*5, name = "Proportion positive for Borrelia"), limits=c(0,0.1))  +
+  theme(axis.title.y.right = element_text(colour = "red")) +ylab("Mean Squared Error")
+
+```
+
+
+
+## Part IV: Simulating predictions
+
+The final question we have is: how much uncertainty is there in our predictions? Since we do not use a bayesian framework, the only uncertainty we have is the point estimate + standard deviation for each data point. We can use these values to estimate a 95% confidence interval for each data point by combining our two models (binomial, plot-level and binomial, individual-level) and simulating zero-inflated distributions for each data point. Then, we can use quantiles to see if the observed value is within the 95% confidence interval.
+
+
+```{r}
+ # First, make a  column of sample names for samples
+predictions_over_doy <- predictions_over_doy %>%
+  mutate(rown = 1:n()
+           ,SimSample = paste0("V",rown))
+nsim <- 1000
+if (!file.exists("model_objects/countPred_sim.RData")) {
+ 
+countPred_sim <- matrix(ncol=nrow(predictions_over_doy), nrow=nsim)
+bin1_sim_all <- matrix(ncol=nrow(predictions_over_doy), nrow=nsim)
+bin2_sim_all <- matrix(ncol=nrow(predictions_over_doy), nrow=nsim)
+  pb <- txtProgressBar(title = "progress bar", min = 0,
+                       max = nrow(predictions_over_doy), style=3)
+  
+  for ( r in 1:nrow(predictions_over_doy)) {
+    expbin_sim <- rnorm(n=nsim, mean=predictions_over_doy[r,"pred_bin"], sd=predictions_over_doy[r,"se"] )
+    bin_sim <- rbinom(n=nsim,size=1,prob = inv.logit(expbin_sim) )
+    expbin2_sim <- rnorm(n=nsim, mean=predictions_over_doy[r,"pred_bin2"], sd=predictions_over_doy[r,"se2"] )
+    bin2_sim <- rbinom(n=nsim, size=predictions_over_doy[r,"numberTested"], prob=inv.logit(expbin2_sim))
+    exp_count_combined <- bin_sim*bin2_sim
+    exp_prop_combined <- exp_count_combined/predictions_over_doy[r,"numberTested"]
+    # Save
+    bin1_sim_all[,r] <- bin_sim
+    bin2_sim_all[,r] <- bin2_sim
+    countPred_sim[,r] <- exp_count_combined
+
+    Sys.sleep(0.1)
+    setTxtProgressBar(pb, r)
+  }
+  save(bin1_sim_all, file="model_objects/bin1_sim_all.RData")
+  save(bin2_sim_all, file="model_objects/bin2_sim_all.RData")
+  save(countPred_sim, file="model_objects/countPred_sim.RData")
+}else {
+  load("model_objects/bin1_sim_all.RData")
+  load("model_objects/bin2_sim_all.RData")
+  load("model_objects/countPred_sim.RData")
+}
+countPred_sim_long <- countPred_sim %>%
+  as.data.frame() %>%
+  mutate(SimID = 1:nsim) %>%
+  gather(-SimID,key=SimSample, value=sim_count) 
+
+if ( !file.exists("model_objects/sim_results.RData")) {
+  sim_results <- predictions_over_doy %>%
+    full_join(countPred_sim_long) %>%
+    mutate(prop_sim = sim_count/numberTested
+           ,SampleID = paste0(plotID,year,dayOfYear, sep="_"))
+  
+  save(sim_results, file="model_objects/sim_results.RData")
+} else {
+  load("model_objects/sim_results.RData")
+}
+
+sim_results_summarized <- sim_results %>%
+  group_by(SampleID, numberPositive, numberTested, proportionPositive, pred_type, pred_bin, pred_bin2, doy_cutoff) %>%
+  summarise(CI97.5_count=quantile(sim_count, probs=0.975)
+            , CI2.5_count=quantile(sim_count, probs=0.025)
+            , sd_count=sd(sim_count)
+            , mean_count=mean(sim_count)
+            , CI97.5_prop=quantile(prop_sim, probs=0.975)
+            , CI2.5_prop=quantile(prop_sim, probs=0.025)
+            , sd_prop=sd(prop_sim)
+            , mean_prop=mean(prop_sim)) %>%
+  ungroup() %>%
+  mutate(res_count = numberPositive-mean_count)
+# count_sim_results$doy_cutoff
+
+```
+
+
+Does the confidence interval for each point decrease in breadth as you increase DOY cutoff? It seems it does not really-- there is a slightly increase over time, but not enough to make predictions meaningfully better. Importantly, the "drop" in CI breadth seems to happen *after* the peak in *Borrelia* every year, which means it's not particularily useful for us.
+
+```{r echo =FALSE}
+sim_results_summarized %>%
+  filter(pred_type=="test_pred") %>%
+  mutate(CIwidth = CI97.5_count-CI2.5_count) %>%
+  select(doy_cutoff, numberPositive, CI2.5_count, CI97.5_count,CIwidth) %>%
+  # group_by(doy_cutoff) %>%
+  # summarize(propInCI95 = sum(inCI)/n()) %>%
+  # ungroup() %>%
+  mutate(Cutoff_for_training = as.Date(doy_cutoff, origin="2017-01-01")) %>%
+  ggplot()+ geom_point(aes(x=Cutoff_for_training, y=CIwidth)) + 
+  geom_smooth(aes(x=Cutoff_for_training, y=CIwidth)) + 
+  ylab("Width of confidence interval") +
+  xlab("Date of cutoff for training model")
+
+```
+
+Additionally, the proportion of samples that are found within its 95% confidence interval increases modestly (~85 to 95%), but this increase in prediction accuracy seems to result after the peak in *Borrelia*. 
+
+```{r echo =FALSE}
+# Within 95% confidence intervals?
+sim_results_summarized %>%
+  filter(pred_type=="test_pred") %>%
+  mutate(inCI = (numberPositive>=CI2.5_count & numberPositive<=CI97.5_count)) %>%
+  select(doy_cutoff, inCI, numberPositive, CI2.5_count, CI97.5_count) %>%
+  group_by(doy_cutoff) %>%
+  summarize(propInCI95 = sum(inCI)/n()) %>%
+  ungroup() %>%
+  mutate(Cutoff_for_training = as.Date(doy_cutoff, origin="2017-01-01")) %>%
+  ggplot()+ geom_line(aes(x=Cutoff_for_training, y=propInCI95)) + 
+  ylab("Proportion of observations in 95% CIs") +
+  xlab("Date of cutoff for training model")+
+  geom_point(data=tck_borrelia_test, aes(x=as.Date(dayOfYear, origin = "2017-01-01"), y=proportionPositive/3+0.75), col="red") +
+  geom_smooth(data=tck_borrelia_test, aes(x=as.Date(dayOfYear, origin = "2017-01-01"), y=proportionPositive/3+0.75), col="red") +
+  scale_y_continuous(sec.axis = sec_axis(trans=~(.-0.75)*3, name = "Proportion positive for Borrelia"))  +
+  theme(axis.title.y.right = element_text(colour = "red"))
+
+```
+
+
+We can compare the prediction accuracy of the training set and testing set to see if our poor predictive power is an issue with the model being over-fitted or under-fitted. Here, we see that predictions for training set values are slightly better than test set values, but that even training set values are poorly predicted in general. Thus, to improve model fit we probably need to get more data or better predictors. 
+
+```{r echo =FALSE}
+# No CI bars; logged
+sim_results_summarized %>%
+  mutate(Predictions_for = ifelse(pred_type=="test_pred","Test set","Train set")) %>%
+  ggplot() + geom_point(aes(x=log(numberPositive+1), y=log(mean_count+1), col=Predictions_for, alpha=doy_cutoff), position = position_jitter(width=0.05, height=0)) +
+  scale_color_manual(values=c("blue","black")) +
+  geom_abline(aes(intercept=0,slope=1))  + ylab("Predicted number positive (log)") + xlab("Observed number positive (log)")
+
+```
+
+
+### Final thoughts
+
+Things we have discovered/confirmed:
+
+* Within our current model, knowing *Borrelia* prevalence in earlier months does not improve knowledge about *Borrelia* prevalence in later months very well. However, this prediction will likely improve with more data.
+* *Borrelia* prevalence does not correlate positively with tick density-- rather, we see a negative correlation. However, it is unclear whether this negative correlation is "real", or if it is a statistical artifact from the fact that prevalence increases in late summer (presumably because there is more time for *Borrelia* to spread amongst the population), which usually sees lower nymph densities.
+* There are many unmeasured variables in our dataset. The variation we see between domains, sites, and plots make it obvious that there is some kind of unmeasured variable driving a lot of *Borrelia* prevalence. However, the "most" we can do right now is use plotID as a proxy for the aggregate effects of all these unknown environmental variables. This is fine for predicting Lyme disease risk for known plots, but means it will not be possible to predict disease risk for "new" plots. 
