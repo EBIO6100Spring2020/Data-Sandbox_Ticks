@@ -1040,9 +1040,9 @@ allAIC_filt <- allAIC %>% filter(!is.na(AIC)) %>% arrange(AIC) %>%mutate(rank=se
            , REML = as.numeric(REML)) %>%
     filter(AIC<500)
  
-allAIC %>%
+allAIC_filt %>%
   select(AIC, REML, Dev.expl, formula) %>%
-  as_tibble()
+  as_tibble() %>% head()
 ```
 Now, we can look at how AIC changes when ranked from best model to least
 
