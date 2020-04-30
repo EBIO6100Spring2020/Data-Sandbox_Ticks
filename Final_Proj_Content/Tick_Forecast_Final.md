@@ -785,7 +785,7 @@ gam.check(mod.gambin)
 ## indicate that k is too low, especially if edf is close to k'.
 ## 
 ##                           k'      edf k-index p-value
-## s(logadultDensity)  9.00e+00 3.25e+00    0.95    0.27
+## s(logadultDensity)  9.00e+00 3.25e+00    0.95    0.25
 ## s(plotID)           5.30e+01 2.20e-03      NA      NA
 ## s(plotID,dayOfYear) 5.30e+01 3.55e+01      NA      NA
 ## s(year)             3.00e+00 1.01e-04      NA      NA
@@ -826,27 +826,6 @@ tck_borrelia_train %>%
 ## observed_status FALSE TRUE
 ##               0   238    5
 ##               1    15   42
-```
-
-```r
-4/(115+4) # False positive rate
-```
-
-```
-## [1] 0.03361345
-```
-
-```r
-13/(13+44) # False negative rate
-```
-
-```
-## [1] 0.2280702
-```
-
-```r
-# The false negative rate is actually a lot higher than the false positive rate. 
-# This means, on average, more samples are positive then you'd expect, given the model.
 ```
 
 
@@ -897,7 +876,7 @@ tck_borrelia_filtBin <- tck_borrelia_train %>%
   filter((borrPresent>0 | pred > 0.5))
 ```
 
-## Part II: Borrelia Prevalence component
+### Part II: Borrelia Prevalence component
 As before, we fit many different models and extract the AIC and Deviance explained by each.
 
 ```r
@@ -942,7 +921,7 @@ frml_bin2_bestAIC
 ```
 
 ```
-## [1] "cbind(numberPositive,numberTested) ~ s(dayOfYear, sp=1) + s(logadultDensity, sp=1) + s(lognymphDensity, sp=1) + s(plotID, bs='re') + s(year, dayOfYear, bs='re')"
+## [1] "cbind(numberPositive,numberTested) ~ s(logadultDensity, sp=1) + s(lognymphDensity, sp=1) + s(plotID, dayOfYear, bs='re') + s(year, bs='re') + s(year, dayOfYear, bs='re') + domainID"
 ```
 
 ```r
@@ -950,7 +929,7 @@ frml_bin2_bestDevexpl
 ```
 
 ```
-## [1] "cbind(numberPositive,numberTested) ~ nlcdClass + s(elevation) + s(logNLtckDensity, sp=1) + s(plotID, dayOfYear, bs='re') + domainID"
+## [1] "cbind(numberPositive,numberTested) ~ nlcdClass + s(logadultDensity, sp=1) + s(lognymphDensity, sp=1) + s(plotID, dayOfYear, bs='re') + s(year, bs='re') + s(year, dayOfYear, bs='re') + domainID"
 ```
 
 Again, we don't show the tedious work of looking through models and predictors; rather we choose the "best AIC model" as our model and show results from just that. 
@@ -972,28 +951,34 @@ summary(mod.gambin_2)
 ## Link function: logit 
 ## 
 ## Formula:
-## cbind(numberPositive, numberTested) ~ s(dayOfYear, sp = 1) + 
-##     s(logadultDensity, sp = 1) + s(lognymphDensity, sp = 1) + 
-##     s(plotID, bs = "re") + s(year, dayOfYear, bs = "re")
+## cbind(numberPositive, numberTested) ~ s(logadultDensity, sp = 1) + 
+##     s(lognymphDensity, sp = 1) + s(plotID, dayOfYear, bs = "re") + 
+##     s(year, bs = "re") + s(year, dayOfYear, bs = "re") + domainID
 ## 
 ## Parametric coefficients:
-##             Estimate Std. Error z value Pr(>|z|)    
-## (Intercept)  -2.0425     0.2162  -9.448   <2e-16 ***
+##             Estimate Std. Error z value Pr(>|z|)  
+## (Intercept)  -1.3685     2.0286  -0.675   0.4999  
+## domainIDD02   4.1727     2.3392   1.784   0.0744 .
+## domainIDD03  -2.4569     2.3234  -1.057   0.2903  
+## domainIDD05   1.1237     2.4169   0.465   0.6420  
+## domainIDD06  -0.8575     2.3227  -0.369   0.7120  
+## domainIDD07   0.5108     2.8773   0.178   0.8591  
+## domainIDD08   0.2273     2.6554   0.086   0.9318  
 ## ---
 ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 ## 
 ## Approximate significance of smooth terms:
-##                       edf Ref.df Chi.sq  p-value    
-## s(dayOfYear)        3.463  4.244  53.75 9.60e-11 ***
-## s(logadultDensity)  3.396  3.802  43.81 7.68e-08 ***
-## s(lognymphDensity)  3.067  3.741  77.57 1.25e-15 ***
-## s(plotID)          20.561 25.000 285.62 3.25e-15 ***
-## s(year,dayOfYear)   1.289  2.000 163.33  0.00715 ** 
+##                        edf Ref.df   Chi.sq  p-value    
+## s(logadultDensity)   3.200  3.531    43.12 9.64e-08 ***
+## s(lognymphDensity)   2.837  3.536    73.08 7.78e-15 ***
+## s(plotID,dayOfYear) 20.815 25.000   317.68 0.000559 ***
+## s(year)              1.235  2.000 23423.07 8.91e-05 ***
+## s(year,dayOfYear)    2.553  3.000 32656.82 2.69e-06 ***
 ## ---
 ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 ## 
-## R-sq.(adj) =   0.82   Deviance explained = 90.3%
-## -REML = 278.19  Scale est. = 1         n = 62
+## R-sq.(adj) =  0.803   Deviance explained = 91.2%
+## -REML = 289.19  Scale est. = 1         n = 62
 ```
 
 ```r
@@ -1005,21 +990,21 @@ gam.check(mod.gambin_2)
 ```
 ## 
 ## Method: REML   Optimizer: outer newton
-## full convergence after 5 iterations.
-## Gradient range [-1.597563e-07,1.157841e-05]
-## (score 278.1926 & scale 1).
-## Hessian positive definite, eigenvalue range [0.5301498,8.052762].
+## full convergence after 12 iterations.
+## Gradient range [-1.378787e-07,4.329546e-07]
+## (score 289.1889 & scale 1).
+## Hessian positive definite, eigenvalue range [0.5692267,6.00674].
 ## Model rank =  57 / 57 
 ## 
 ## Basis dimension (k) checking results. Low p-value (k-index<1) may
 ## indicate that k is too low, especially if edf is close to k'.
 ## 
-##                       k'   edf k-index p-value
-## s(dayOfYear)        9.00  3.46    1.17    0.92
-## s(logadultDensity)  9.00  3.40    1.13    0.89
-## s(lognymphDensity)  9.00  3.07    1.29    1.00
-## s(plotID)          26.00 20.56      NA      NA
-## s(year,dayOfYear)   3.00  1.29      NA      NA
+##                        k'   edf k-index p-value
+## s(logadultDensity)   9.00  3.20    1.19    0.94
+## s(lognymphDensity)   9.00  2.84    1.12    0.82
+## s(plotID,dayOfYear) 26.00 20.82      NA      NA
+## s(year)              3.00  1.23      NA      NA
+## s(year,dayOfYear)    3.00  2.55      NA      NA
 ```
 
 ```r
@@ -1036,7 +1021,7 @@ plot(mod.gambin_2, pages=1)
 ![](Tick_Forecast_Final_files/figure-html/unnamed-chunk-61-3.png)<!-- -->
 
 
-## Part III: Predicting 2017
+### Part III: Predicting 2017
 
 Now that we have selected the best-fit models for *Borrelia* presence/absence and prevalence, the next step is to try to predict *Borrelia* for the year 2017. Below, we interate through all test/train splits (using every new sampling day as a new DOY "cutoff" point) to see if prediction accuracy increases if we have more data on that year
 
@@ -1082,7 +1067,7 @@ for ( i in 1:length(daysIn2017) ) {
 
 predictions_over_doy <- predictions_over_doy_unprocessed %>%
   filter(!is.na(pred_bin))
-save(predictions_over_doy,"model_objects/predictions_over_doy.RData")
+save(predictions_over_doy,file="model_objects/predictions_over_doy.RData")
 } else {
   load("model_objects/predictions_over_doy.RData")
 }
@@ -1101,6 +1086,10 @@ We can split up the "error" of this binomial model into false positives and fals
 ## `geom_smooth()` using method = 'loess' and formula 'y ~ x'
 ```
 
+```
+## Warning: Removed 4 rows containing missing values (geom_smooth).
+```
+
 ![](Tick_Forecast_Final_files/figure-html/unnamed-chunk-65-1.png)<!-- -->
 
 ![](Tick_Forecast_Final_files/figure-html/unnamed-chunk-66-1.png)<!-- -->
@@ -1115,7 +1104,7 @@ Next, we look at the errors in predictions for prevalence amongst tick within pl
 
 
 
-## Part IV: Simulating predictions
+### Part IV: Simulating predictions
 
 The final question we have is: how much uncertainty is there in our predictions? Since we do not use a bayesian framework, the only uncertainty we have is the point estimate + standard deviation for each data point. We can use these values to estimate a 95% confidence interval for each data point by combining our two models (binomial, plot-level and binomial, individual-level) and simulating zero-inflated distributions for each data point. Then, we can use quantiles to see if the observed value is within the 95% confidence interval.
 
@@ -1192,14 +1181,9 @@ sim_results_summarized <- sim_results %>%
 
 Does the confidence interval for each point decrease in breadth as you increase DOY cutoff? It seems it does not really-- there is a slightly increase over time, but not enough to make predictions meaningfully better. Importantly, the "drop" in CI breadth seems to happen *after* the peak in *Borrelia* every year, which means it's not particularily useful for us.
 
-
-```
-## `geom_smooth()` using method = 'gam' and formula 'y ~ s(x, bs = "cs")'
-```
-
 ![](Tick_Forecast_Final_files/figure-html/unnamed-chunk-69-1.png)<!-- -->
 
-Additionally, the proportion of samples that are found within its 95% confidence interval increases modestly (~85 to 95%), but this increase in prediction accuracy seems to result after the peak in *Borrelia*. 
+The 95% confidence interval increases when tick prevalence is high-- which is exected. But more interestingly, there is a modest drop in confidence interval size early on in the year. It is unclear whether this drop in uncertainty is useful to us or not. 
 
 
 ```
