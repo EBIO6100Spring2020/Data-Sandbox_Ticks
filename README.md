@@ -1,4 +1,4 @@
-# Data-sandbox
+# Tick abundance and disease prevalence using NEON data
 
 ## About
 ### Authors: Matt Bitters, Melissa Chen, Brendan Hobart, Wynne Moss
@@ -10,7 +10,7 @@ The goal of this project is to use NEON's tick abundance and tick pathogen data 
 
 ## Repo structure
 
-*To see final project; clone the repo Final_Proj_Content*. This folder is stand-alone and you will be able to reproduce our final analyses. 
+**Important:** To view final project; clone the repo `Final_Proj_Content`. This folder is stand-alone and you will be able to reproduce our final analyses. 
 
 Other Subdirectories:
 
