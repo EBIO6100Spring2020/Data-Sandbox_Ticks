@@ -7,6 +7,7 @@
 # This script will fit a variety of zero-inflated poisson models and evaluate model fit
 library(mgcv)
 library(dplyr)
+library(tidyr)
 library(broom)
 library(ggplot2)
 library(stringr)
@@ -67,7 +68,13 @@ if(models.exist == FALSE){
   zip6 <- gam(list(estimatedCount ~ s(sDayofYear) +offset(logSampledArea) + s(yearPlot, bs = "re"),
                    ~season + nlcdClass + s(plotID, bs = "re")),
               data = abun, family = ziplss())
-  
+  # add a randomn smooth for day of year by plot
+  zip7 <- gam(list(estimatedCount ~ s(sDayofYear, plotID, bs = "re") +fYear + offset(logSampledArea) ,
+                   ~season + nlcdClass + s(plotID, bs = "re")),
+              data = abun, family = ziplss())
+  zip8 <- gam(list(estimatedCount ~ s(sDayofYear, yearPlot, bs = "re") + offset(logSampledArea), 
+                   ~season + nlcdClass + s(plotID, bs = "re")), 
+              data = abun, family = ziplss())
   pattern <- ls(pattern="zip") # get names of models
   # pattern <- grep("zip", names(.GlobalEnv), value = TRUE)
   models <- do.call("list", mget(pattern))
@@ -75,6 +82,7 @@ if(models.exist == FALSE){
   # save models
   saveRDS(models, "Model_objects/zipmodels_tick_abun.Rdata" )
 }
+
 ####  2: COMPARE MODELS WITH AIC ####
 # compare models with AIC
 pattern <- ls(pattern="zip") # get names of models
@@ -118,6 +126,7 @@ levels(nymph_pred$plotID)[which(!levels(nymph_pred$plotID) %in% levels(abun$plot
 levels(nymph_pred$yearPlot)[which(!levels(nymph_pred$yearPlot) %in% levels(abun$yearPlot))]
 # nope
 
+## ignore this part for final version
 # first I need to figure out how the predict function works ............ 
 predict.test <- data.frame(predict(zip6, newdata = nymph_pred, type = "link", se.fit = TRUE))
 predict.test <- cbind(predict.test, predict(zip6, newdata = nymph_pred, type = "response", se.fit = TRUE))
@@ -170,7 +179,7 @@ nymphtest$observed_presence <- nymphtest$nymph_presence
 nymphtest$observed_count <- nymphtest$estimatedCount
 nymphtest$observed_dens <- nymphtest$density
 
-rm(predict.count, predict.pois, predict.count.nooff, nymph_pred0)
+rm(predict.count, predict.pois, predict.count.nooff, nymph_pred0, nymph_pred)
 
 nymphtest %>% ggplot() + geom_histogram(aes(predicted_prob, fill = as.factor(observed_presence))) + facet_wrap(~observed_presence) + theme_classic() +
   xlab("Model predicted probability of presence") +
@@ -273,8 +282,8 @@ nymph_all <- rbind(nymph_train, nymph_test)
 nymph_all %>% ggplot(aes(x=sDayofYear, y = density, group = plotID)) +
   geom_point(aes(color = plotID), show.legend=FALSE)+
   facet_wrap(~year)
+# yes! 2017 is weird (few ticks) we picked a bad dataset to train/test on.
 rm(nymph_train, nymph_test)
-# yes! ha. we picked a bad dataset to train/test on.
 
 # let's look at how we did for plots that aren't outliers!
 nymph_all %>% group_by(plotID) %>% mutate(meanTicks = mean(density)) %>% ungroup()-> nymph_all
@@ -293,8 +302,8 @@ abun %>% filter(!plotID %in% outliers) %>%
   geom_point(data = nymphtest, aes(x=sDayofYear, y = predicted_count*predicted_prob), col = "blue")
 
 nymphtest %>% filter(!plotID %in% outliers) %>%
-  ggplot(aes(x=predicted_count*predicted_prob, y = observed_count, color = plotID), show.legend = FALSE)+
-  geom_point() 
+  ggplot(aes(x=predicted_count*predicted_prob, y = observed_count, color = plotID))+
+  geom_point(show.legend = FALSE) 
 
 rm(bad_preds, good_preds, outliers, plotMeans)
 ####  5: EVALUATE MODEL PERFORMS USING FULL DATASET #########
@@ -413,7 +422,7 @@ predicts_null_re %>% filter(nymph_presence == 1) %>%
 
 
 
-####  7: INTERPRET MODEL COEFFICIENTS (IGNORE ALL THIS FOR NOW) #####
+####  7: INTERPRET MODEL COEFFICIENTS, VISUALIZE #####
 # let's only predict in plot-years where we have data
 plotyearclasscombos <- unique(paste(abun$plotID, abun$yearPlot, abun$nlcdClass, sep ="_"))
 
@@ -443,12 +452,13 @@ colScale <- scale_colour_manual(name = "year",values = myColors)
 fillScale <- scale_fill_manual(name = "year",values = myColors)
 
 # predict for new data
-summary(zip6o)
-colnames(newdata)
-
-preds <- data.frame(predict(zip6o, newdata=newdata, se.fit = TRUE))
+preds <- data.frame(predict(zip6, newdata=newdata, se.fit = TRUE))
 colnames(preds) <- c("log_count", "logit_prob", "log_count_se", "logit_prob_se")
-preds <- cbind(preds, newdata)
+preds <- cbind(newdata, preds)
+head(preds)
+data.frame(predict(zip6, newdata = newdata, type = "response", se.fit = TRUE)) %>% 
+  mutate(mean_count_pred = exp(fit), mean_count_low = exp(fit-2*se.fit), mean_count_hi = exp(fit + 2*se.fit)) %>% cbind(preds) -> preds
+head(preds)
 preds %>% mutate(
   conf.logit.low =logit_prob - 2*logit_prob_se,
   conf.logit.hi = logit_prob + 2*logit_prob_se,
@@ -467,10 +477,24 @@ head(preds)
 
 
 # pick a few plots to illustrate
-preds %>% ggplot(aes(x=sDayofYear, y = count)) +
-  geom_point(aes(color = year))+
+preds %>% ggplot(aes(x=sDayofYear, y = mean_count_pred)) +
+  geom_line(aes(group = yearPlot, color = year))+
+  facet_wrap(~nlcdClass, scales = "free")+
+  colScale+
+  theme_classic()
+
+preds %>% ggplot(aes(x=sDayofYear, y = mean_count_pred)) +
+  geom_line(aes(group = yearPlot, color = year))+
   facet_wrap(~nlcdClass)+
-  colScale
+  colScale+
+  theme_classic()
+
+preds %>% filter(plotID == "SCBI_013", season == 1) %>%
+  ggplot(aes(x=sDayofYear, y = mean_count_pred)) +
+  geom_line(aes(group = yearPlot, color = year)) +
+  colScale+
+  theme_classic()
+
 abun %>% ggplot(aes(x=sDayofYear, y = estimatedCount))+
   geom_point(aes(color = year))+
   facet_wrap(~nlcdClass)+
