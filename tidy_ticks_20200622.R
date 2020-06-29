@@ -14,12 +14,12 @@ library(lubridate)
 
 # modify this loop for GitHub repo structure (e.g. data raw folder name)
 
-# if(!file.exists("data_raw/tck_sitexspecies.Rdata") |
-#    !file.exists("data_raw/tck_sitexspecies_env.Rdata") |
-#    !file.exists("data_raw/tck_longform.Rdata")){
-#   Tick_all <- loadByProduct(dpID = "DP1.10093.001", site = "all", package = "expanded", check.size = F) # downloads from NEON and loads to env
-#   
-# }
+if(!file.exists("data_raw/tck_sitexspecies.Rdata") |
+   !file.exists("data_raw/tck_sitexspecies_env.Rdata") |
+   !file.exists("data_raw/tck_longform.Rdata")){
+  Tick_all <- loadByProduct(dpID = "DP1.10093.001", site = "all", package = "expanded", check.size = F) # downloads from NEON and loads to env
+
+}
 
 # tck_taxonomyProcessed and tck_fielddata are the two datasets we want 
 tck_fielddata <- Tick_all$tck_fielddata
