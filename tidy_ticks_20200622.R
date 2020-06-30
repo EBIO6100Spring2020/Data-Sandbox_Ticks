@@ -20,14 +20,14 @@ if(!file.exists("data_raw/tck_sitexspecies.Rdata") |
   Tick_all <- loadByProduct(dpID = "DP1.10093.001", site = "all", package = "expanded", check.size = F) # downloads from NEON and loads to env
 
   # #### If you get an error with regexp in list.files, and the above doesn't work:
-  # zipsByProduct(dpID="DP1.10093.001", site="all", package = "expanded", check.size = F, savepath = "./")
-  # stackByTable(filepath = "./filesToStack10093/", savepath = "./filesToStack10093/") # in R-4.0.0, MacOS Mojave v10.14.6, it will stack but won't delete raw files.
+  # zipsByProduct(dpID="DP1.10093.001", site="all", package = "expanded", check.size = F, savepath = ".//data_raw")
+  # stackByTable(filepath = "./data_raw/filesToStack10093/", savepath = "./data_raw/filesToStack10093/") # in R-4.0.0, MacOS Mojave v10.14.6, it will stack but won't delete raw files.
   # #### manually delete "raw" files
-  # fileNames <- list.files(path="./filesToStack10093/", pattern = "NEON[.]D", include.dirs = TRUE, full.names = TRUE)
+  # fileNames <- list.files(path="./data_raw/filesToStack10093/", pattern = "NEON[.]", include.dirs = TRUE, full.names = TRUE)
   # unlink(fileNames, recursive = TRUE)
-  # tck_fielddata <- read.csv("./filesToStack10093/stackedFiles/tck_fielddata.csv", header=TRUE, stringsAsFactors = FALSE)
-  # tck_tax <- read.csv("./filesToStack10093/stackedFiles/tck_taxonomyProcessed.csv", header=TRUE, stringsAsFactors = FALSE)
-  # tck_tax_raw <- read.csv("./filesToStack10093/stackedFiles/tck_taxonomyRaw.csv", header=TRUE, stringsAsFactors = FALSE)
+  # tck_fielddata <- read.csv("./data_raw/filesToStack10093/stackedFiles/tck_fielddata.csv", header=TRUE, stringsAsFactors = FALSE)
+  # tck_tax <- read.csv("./data_raw/filesToStack10093/stackedFiles/tck_taxonomyProcessed.csv", header=TRUE, stringsAsFactors = FALSE)
+  # tck_tax_raw <- read.csv("./data_raw/filesToStack10093/stackedFiles/tck_taxonomyRaw.csv", header=TRUE, stringsAsFactors = FALSE)
   # Tick_all <- list(tck_fielddata=(tck_fielddata),tck_taxonomyProcessed=(tck_tax),tck_taxonomyRaw=(tck_tax_raw))
 }
 
@@ -98,16 +98,16 @@ rm(missing.counts)
 
 # some samples have no ticks present but counts are NA instead of 0
 # fill these in with 0s
-tck_fielddata %>% mutate(adultCount = ifelse(targetTaxaPresent == "N" & totalSampledArea > 0 & is.na(adultCount), 0, adultCount),
-                         nymphCount = ifelse(targetTaxaPresent=="N" & totalSampledArea > 0 & is.na(nymphCount), 0, nymphCount),
-                         larvaCount = ifelse(targetTaxaPresent == "N" & totalSampledArea >0 & is.na(larvaCount),0, larvaCount)) -> tck_fielddata
 
-## Using base R ifelse instead of tidyverse if_else because if_else gives dbl/int errors for counts
-
-# 
 # tck_fielddata %>% mutate(adultCount = if_else(targetTaxaPresent == "N" & totalSampledArea > 0 & is.na(adultCount), 0, adultCount),
 #                          nymphCount = if_else(targetTaxaPresent=="N" & totalSampledArea > 0 & is.na(nymphCount), 0, nymphCount),
 #                          larvaCount = if_else(targetTaxaPresent == "N" & totalSampledArea >0 & is.na(larvaCount),0, larvaCount)) -> tck_fielddata
+
+tck_fielddata %>% mutate(adultCount = ifelse(targetTaxaPresent == "N" & totalSampledArea > 0 & is.na(adultCount), 0, adultCount),
+                         nymphCount = ifelse(targetTaxaPresent=="N" & totalSampledArea > 0 & is.na(nymphCount), 0, nymphCount),
+                         larvaCount = ifelse(targetTaxaPresent == "N" & totalSampledArea >0 & is.na(larvaCount),0, larvaCount)) -> tck_fielddata
+## Using base R ifelse instead of tidyverse if_else because if_else gives dbl/int errors for counts MYC
+
 
 # are there any 0 counts where there should be > 0?
 tck_fielddata %>% filter(targetTaxaPresent == "Y") %>% mutate(totalCount = adultCount + nymphCount + larvaCount) %>% filter(totalCount == 0) # no
