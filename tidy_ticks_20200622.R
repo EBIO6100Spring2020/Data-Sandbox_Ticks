@@ -19,6 +19,16 @@ if(!file.exists("data_raw/tck_sitexspecies.Rdata") |
    !file.exists("data_raw/tck_longform.Rdata")){
   Tick_all <- loadByProduct(dpID = "DP1.10093.001", site = "all", package = "expanded", check.size = F) # downloads from NEON and loads to env
 
+  # #### If you get an error with regexp in list.files, and the above doesn't work:
+  # zipsByProduct(dpID="DP1.10093.001", site="all", package = "expanded", check.size = F, savepath = "./")
+  # stackByTable(filepath = "./filesToStack10093/", savepath = "./filesToStack10093/") # in R-4.0.0, MacOS Mojave v10.14.6, it will stack but won't delete raw files.
+  # #### manually delete "raw" files
+  # fileNames <- list.files(path="./filesToStack10093/", pattern = "NEON[.]D", include.dirs = TRUE, full.names = TRUE)
+  # unlink(fileNames, recursive = TRUE)
+  # tck_fielddata <- read.csv("./filesToStack10093/stackedFiles/tck_fielddata.csv", header=TRUE, stringsAsFactors = FALSE)
+  # tck_tax <- read.csv("./filesToStack10093/stackedFiles/tck_taxonomyProcessed.csv", header=TRUE, stringsAsFactors = FALSE)
+  # tck_tax_raw <- read.csv("./filesToStack10093/stackedFiles/tck_taxonomyRaw.csv", header=TRUE, stringsAsFactors = FALSE)
+  # Tick_all <- list(tck_fielddata=(tck_fielddata),tck_taxonomyProcessed=(tck_tax),tck_taxonomyRaw=(tck_tax_raw))
 }
 
 # tck_taxonomyProcessed and tck_fielddata are the two datasets we want 
@@ -36,13 +46,15 @@ repl_na <- function(x) ifelse(x=="", NA, x)
 tck_fielddata %>% mutate_if(.predicate = is.character, .funs = repl_na) -> tck_fielddata
 
 # check which fields have NAs
-tck_fielddata %>% select(everything()) %>% summarise_all(funs(sum(is.na(.))))
+# tck_fielddata %>% select(everything()) %>% summarise_all(funs(sum(is.na(.))))
+tck_fielddata %>% select(everything()) %>% summarise_all(~sum(is.na(.))) # this is "not" depreciated MYC
 
 #### Quality Flags
 # remove samples that had logistical issues
 # keep only those with NA in samplingImpractical 
 tck_fielddata %>% filter(is.na(samplingImpractical)) -> tck_fielddata
-tck_fielddata %>% select(everything()) %>% summarise_all(funs(sum(is.na(.))))
+# tck_fielddata %>% select(everything()) %>% summarise_all(funs(sum(is.na(.))))
+tck_fielddata %>% select(everything()) %>% summarise_all(~sum(is.na(.))) # MYC
 
 table(tck_fielddata$sampleCondition) # none of these are major issues
 table(tck_fielddata$dataQF) # 551 are legacy data (they look OK but let's remove anyways)
@@ -81,14 +93,21 @@ tck_tax %>% filter(sampleID %in% missing.counts)
 tck_tax_raw %>% filter(sampleID %in% missing.counts)
 
 # these aren't in the tax table either...get rid of these records
-tck_fielddata %>% filter(!sampleID %in% missing.counts) -> tck_fielddata
+tck_fielddata %>% filter(!(sampleID %in% missing.counts)) -> tck_fielddata
 rm(missing.counts)
 
 # some samples have no ticks present but counts are NA instead of 0
 # fill these in with 0s
-tck_fielddata %>% mutate(adultCount = if_else(targetTaxaPresent == "N" & totalSampledArea > 0 & is.na(adultCount) , 0, adultCount),
-                         nymphCount = if_else(targetTaxaPresent=="N" & totalSampledArea > 0 & is.na(nymphCount), 0, nymphCount),
-                         larvaCount = if_else(targetTaxaPresent == "N" & totalSampledArea >0 & is.na(larvaCount),0, larvaCount)) -> tck_fielddata
+tck_fielddata %>% mutate(adultCount = ifelse(targetTaxaPresent == "N" & totalSampledArea > 0 & is.na(adultCount), 0, adultCount),
+                         nymphCount = ifelse(targetTaxaPresent=="N" & totalSampledArea > 0 & is.na(nymphCount), 0, nymphCount),
+                         larvaCount = ifelse(targetTaxaPresent == "N" & totalSampledArea >0 & is.na(larvaCount),0, larvaCount)) -> tck_fielddata
+
+## Using base R ifelse instead of tidyverse if_else because if_else gives dbl/int errors for counts
+
+# 
+# tck_fielddata %>% mutate(adultCount = if_else(targetTaxaPresent == "N" & totalSampledArea > 0 & is.na(adultCount), 0, adultCount),
+#                          nymphCount = if_else(targetTaxaPresent=="N" & totalSampledArea > 0 & is.na(nymphCount), 0, nymphCount),
+#                          larvaCount = if_else(targetTaxaPresent == "N" & totalSampledArea >0 & is.na(larvaCount),0, larvaCount)) -> tck_fielddata
 
 # are there any 0 counts where there should be > 0?
 tck_fielddata %>% filter(targetTaxaPresent == "Y") %>% mutate(totalCount = adultCount + nymphCount + larvaCount) %>% filter(totalCount == 0) # no
@@ -109,7 +128,8 @@ tck_tax %>% filter(sampleID %in% tck_fielddata$sampleID) -> tck_tax
 req_cols <- c("siteID", "plotID", "collectDate", "adultCount", "nymphCount", "larvaCount", "totalSampledArea")
 
 # check for NAs again
-tck_fielddata %>% select(req_cols) %>% summarise_all(funs(sum(is.na(.))))
+# tck_fielddata %>% select(req_cols) %>% summarise_all(funs(sum(is.na(.))))
+tck_fielddata %>% select(req_cols) %>% summarise_all(~sum(is.na(.))) # MYC
 
 
 ####################################
@@ -131,6 +151,7 @@ tck_tax %>% filter(sampleCondition == "OK") -> tck_tax
 
 ### check for NAs in fields 
 tck_tax %>% select(everything()) %>% summarise_all(funs(sum(is.na(.))))
+tck_tax %>% select(everything()) %>% summarise_all(~sum(is.na(.))) # MYC 
 
 tck_tax %>% filter(!is.na(identifiedDate)) %>% filter(!is.na(acceptedTaxonID)) -> tck_tax
 
@@ -225,7 +246,8 @@ for(i in 1:length(taxon.cols)){
 
 # check for NAs in the count columns
 
-tck_merged %>% select_if(is_numeric)%>% summarise_all(funs(sum(is.na(.))))
+# tck_merged %>% select_if(is_numeric)%>% summarise_all(funs(sum(is.na(.))))
+tck_merged %>% select_if(is_numeric)%>% summarise_all(~sum(is.na(.))) ### MYC
 
 #########################################################
 #FIX COUNT DISCREPANCIES BETWEEN FIELD AND LAB #
