@@ -60,6 +60,7 @@ data_raw/filesToStack10072
 machineLearnSpace.RData
 data_raw/*
 *filesToStack*
+*.DS_Store
 
 # don't upload Wynne's play data
 About_GAMs.Rmd
