@@ -2,6 +2,13 @@
 # Authors: Wynne Moss, Melissa Chen, Brendan Hobart, Matt Bitters
 # Date: 6/22/20
 
+### to do list
+# add total identified column
+# add total tick column
+# ecocomp
+# fix the unassigned code and simplify 
+# fix comments
+
 library(tidyverse)
 library(neonUtilities)
 library(lubridate)
