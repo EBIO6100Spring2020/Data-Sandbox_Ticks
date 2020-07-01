@@ -59,7 +59,6 @@ data_raw/filesToStack10072
 # Don't upload RData
 machineLearnSpace.RData
 data_raw/*
-*filesToStack*
 *.DS_Store
 
 # don't upload Wynne's play data
