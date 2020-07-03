@@ -45,6 +45,8 @@ if(file.exists("data_raw/Tick_Raw_Stacked.Rdata")){
   # tck_tax_raw <- read.csv("./data_raw/filesToStack10093/stackedFiles/tck_taxonomyRaw.csv", header=TRUE, stringsAsFactors = FALSE)
   # Tick_all <- list(tck_fielddata=(tck_fielddata),tck_taxonomyProcessed=(tck_taxonomyProcessed),tck_taxonomyRaw=(tck_tax_raw))
 
+
+
 ###########################################
 # CLEAN TICK FIELD DATA #
 ###########################################
@@ -58,13 +60,12 @@ tck_fielddata %>% mutate_if(.predicate = is.character, .funs = repl_na) -> tck_f
 # check which fields have NAs
 tck_fielddata %>% select(everything()) %>% summarise_all(~sum(is.na(.))) 
 
-
 #### Check correspondence between field and lab
+# Making the assumption that the user only cares about ID'd ticks and not raw abundances.
+# If so, we only want to include field records corresponding to the records that have lab dates
 
-# Are all the field samples in the tax table?
+# Are all the field samples that were assigned a sample ID in the tax table?
 tck_fielddata %>% filter(!sampleID %in% tck_taxonomyProcessed$sampleID, !is.na(sampleID)) %>% nrow()
-tck_fielddata %>% filter(!sampleID %in% tck_taxonomyProcessed$sampleID, !is.na(sampleID)) %>% pull(collectDate) %>% year() %>% table()
-# these are spread across years (not obvious why they weren't ID'd)
 
 # Get rid of field samples that have no taxonomic info 
 tck_fielddata %>% filter(sampleID %in% tck_taxonomyProcessed$sampleID | is.na(sampleID)) -> tck_fielddata 
@@ -76,11 +77,13 @@ tck_taxonomyProcessed %>% filter(!sampleID %in% tck_fielddata$sampleID, !is.na(s
 tck_taxonomyProcessed %>% filter(sampleID %in% tck_fielddata$sampleID) -> tck_taxonomyProcessed
 
 
+# In 2019, tick counts were switched over to lab (according to protocol)
+# For that reason, we probably don't want to include field years for which the lab is not ready
+
 #### Quality Flags
 # remove samples that had logistical issues
 # keep only those with NA in samplingImpractical 
-tck_fielddata %>% filter(is.na(samplingImpractical)) -> tck_fielddata
-tck_fielddata %>% select(everything()) %>% summarise_all(~sum(is.na(.))) # MYC
+tck_fielddata %>% filter(is.na(samplingImpractical)|samplingImpractical == "OK") -> tck_fielddata
 
 table(tck_fielddata$sampleCondition) # none of these are major issues
 table(tck_fielddata$dataQF) # many are legacy data
@@ -91,7 +94,9 @@ tck_fielddata %>% filter(dataQF == "legacyData") %>% mutate(year = year(collectD
 # tck_fielddata %>% filter(is.na(dataQF)) -> tck_fielddata 
 
 # scan through remarks (optional)
+
 # tck_fielddata %>% filter(is.na(dataQF)) %>% pull(remarks) %>% unique()
+
 # many of these explain why the tax count might be smaller than field count (individuals dropped or lost, etc)
 # many are comments relating to drag length
 
@@ -113,24 +118,22 @@ sum(duplicated(na.omit(tck_fielddata$sampleID)))
 tck_fielddata %>% filter(targetTaxaPresent == "Y" & is.na(sampleID)) # none are missing S.ID
 
 ### Check Counts vs. NAs 
-# some samples have ticks present and a sample ID but no counts 
+
+table(tck_fielddata$targetTaxaPresent, year(tck_fielddata$collectDate))
+# make sure samples with ticks present have counts
 tck_fielddata %>% filter(targetTaxaPresent == "Y") %>%
-  filter(is.na(adultCount) & is.na(nymphCount) & is.na(larvaCount)) %>% pull(sampleID) -> missing.counts
+  filter(is.na(adultCount) & is.na(nymphCount) & is.na(larvaCount)) %>% nrow()
 
-# are they in the tax data?
-tck_taxonomyProcessed %>% filter(sampleID %in% missing.counts)
+# after 2019, the counts were done by taxonomists (need to varify this but if so this code may need updating...)
 
-# what years?
-tck_fielddata %>% filter(sampleID %in% missing.counts) %>% pull(collectDate) %>% year() %>% table()
-# These are mostly 2019-2020 samples that haven't been ID'd yet.
 
-# Get rid of these records:
-tck_fielddata %>% filter(!(sampleID %in% missing.counts)) -> tck_fielddata
-rm(missing.counts)
+# samples without ticks should have 0 counts
+tck_fielddata %>% filter(targetTaxaPresent == "N") %>% select(adultCount, nymphCount, larvaCount) %>% summarise_all(~sum(is.na(.))) 
+tck_fielddata %>% filter(targetTaxaPresent == "N" , is.na(adultCount)) %>% View(
+  
+)
 
-# some samples have no ticks present but counts are NA instead of 0
 # fill these in with 0s
-
 tck_fielddata %>% mutate(adultCount = ifelse(targetTaxaPresent == "N" & totalSampledArea > 0 & is.na(adultCount), 0, adultCount),
                          nymphCount = ifelse(targetTaxaPresent=="N" & totalSampledArea > 0 & is.na(nymphCount), 0, nymphCount),
                          larvaCount = ifelse(targetTaxaPresent == "N" & totalSampledArea >0 & is.na(larvaCount),0, larvaCount)) -> tck_fielddata
