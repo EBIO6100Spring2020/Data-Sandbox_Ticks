@@ -12,7 +12,7 @@
 library(tidyverse) # for data wrangling and piping (dplyr probably ok)
 library(neonUtilities) # for downloading data
 library(lubridate) # for finding year from dates
-
+library(stringr)
 ###########################################
 #  LOAD TICK DATA FROM NEON OR FILE SOURCE 
 ###########################################
@@ -46,6 +46,16 @@ if(file.exists("data_raw/Tick_Raw_Stacked.Rdata")){
   # Tick_all <- list(tck_fielddata=(tck_fielddata),tck_taxonomyProcessed=(tck_taxonomyProcessed),tck_taxonomyRaw=(tck_tax_raw))
 
 
+###########################################
+# NOTES ON GENERAL DATA ISSUES #
+###########################################
+
+# Issue: the latency between field (30 days) and lab (300 days) is different
+# In 2019, counts were switched over to the lab instead of the field
+# If the samples aren't processed yet, there will be an NA for all the counts (even if there weren't taxa present)
+# Therefore, if ticks weren't present (targetTaxaPresent == "N"), we do NOT want to assign a count of 0
+# Doing so would mean that later dates have ONLY 0s for counts. Rather, we should not use those dates until the lab data come in
+# larva counts were only started in later years; requiring them will remove earlier years
 
 ###########################################
 # CLEAN TICK FIELD DATA #
@@ -60,86 +70,72 @@ tck_fielddata %>% mutate_if(.predicate = is.character, .funs = repl_na) -> tck_f
 # check which fields have NAs
 tck_fielddata %>% select(everything()) %>% summarise_all(~sum(is.na(.))) 
 
-#### Check correspondence between field and lab
-# Making the assumption that the user only cares about ID'd ticks and not raw abundances.
-# If so, we only want to include field records corresponding to the records that have lab dates
-
-# Are all the field samples that were assigned a sample ID in the tax table?
-tck_fielddata %>% filter(!sampleID %in% tck_taxonomyProcessed$sampleID, !is.na(sampleID)) %>% nrow()
-
-# Get rid of field samples that have no taxonomic info 
-tck_fielddata %>% filter(sampleID %in% tck_taxonomyProcessed$sampleID | is.na(sampleID)) -> tck_fielddata 
-
-# Are all records from tax table in field table?
-tck_taxonomyProcessed %>% filter(!sampleID %in% tck_fielddata$sampleID, !is.na(sampleID)) %>% nrow() # 
-
-# If not, get rid of the tax samples that have no field data 
-tck_taxonomyProcessed %>% filter(sampleID %in% tck_fielddata$sampleID) -> tck_taxonomyProcessed
-
-
-# In 2019, tick counts were switched over to lab (according to protocol)
-# For that reason, we probably don't want to include field years for which the lab is not ready
-
 #### Quality Flags
 # remove samples that had logistical issues
 # keep only those with NA in samplingImpractical 
-tck_fielddata %>% filter(is.na(samplingImpractical)|samplingImpractical == "OK") -> tck_fielddata
+tck_fielddata %>% filter(is.na(samplingImpractical)|samplingImpractical == "OK") -> tck_fielddata_filtered
 
-table(tck_fielddata$sampleCondition) # none of these are major issues
-table(tck_fielddata$dataQF) # many are legacy data
+#### Remove records with no count data  
+# first confirm that lots of the records with no count data are recent years
+tck_fielddata_filtered %>% filter(is.na(adultCount), is.na(nymphCount)) %>% mutate(year = year(collectDate)) %>% 
+  pull(year) %>% table()
 
-tck_fielddata %>% filter(dataQF == "legacyData") %>% mutate(year = year(collectDate)) %>% pull(year) %>% table() # all from 2014 and 2015
+# filter only records with count data
+tck_fielddata_filtered %>% filter(!is.na(adultCount), !is.na(nymphCount), !is.na(larvaCount)) -> tck_fielddata_filtered
 
-# legacy data seems ok but many are missing lifestage (deal with this later)
-# tck_fielddata %>% filter(is.na(dataQF)) -> tck_fielddata 
+#### Check correspondence between field and lab
+# Making the assumption that the user only cares about ID'd ticks and not raw abundances.
+# If so,  only include field records corresponding to the records that have lab dates
 
-# scan through remarks (optional)
+# Are all the field samples that were assigned a sample ID in the tax table?
+tck_fielddata_filtered %>% filter(!sampleID %in% tck_taxonomyProcessed$sampleID, !is.na(sampleID)) %>% nrow()
 
-# tck_fielddata %>% filter(is.na(dataQF)) %>% pull(remarks) %>% unique()
+# Get rid of field samples that have no taxonomic info 
+tck_fielddata_filtered %>% filter(sampleID %in% tck_taxonomyProcessed$sampleID | is.na(sampleID)) -> tck_fielddata_filtered 
 
-# many of these explain why the tax count might be smaller than field count (individuals dropped or lost, etc)
-# many are comments relating to drag length
+# Are all records from tax table in field table?
+tck_taxonomyProcessed %>% filter(!sampleID %in% tck_fielddata_filtered$sampleID, !is.na(sampleID)) %>% nrow() # 
+
+# If not, get rid of the tax samples that have no field data
+# many of these are legacy samples where larvae weren't counted 
+tck_taxonomyProcessed %>% filter(sampleID %in% tck_fielddata_filtered$sampleID) -> tck_taxonomyProcessed
+
+length(unique(na.omit(tck_fielddata_filtered$sampleID)))
+length(unique(tck_taxonomyProcessed$sampleID)) # match
+
+
+#### Check other quality control/sample remarks
+
+table(tck_fielddata_filtered$sampleCondition) # none of these are major issues
+table(tck_fielddata_filtered$dataQF) # many are legacy data
+
+tck_fielddata_filtered %>% filter(dataQF == "legacyData") %>% mutate(year = year(collectDate)) %>% pull(year) %>% table() # all from 2014 and 2015 (leave for now, if they contain all necessary data)
 
 ##### Sample IDs
 # check that all of the rows WITHOUT a sample ID have no ticks
-tck_fielddata %>% filter(is.na(sampleID)) %>% pull(targetTaxaPresent) %>% table() # true
+tck_fielddata_filtered %>% filter(is.na(sampleID)) %>% pull(targetTaxaPresent) %>% table() # true
 
 # check that all the rows WITH a sample ID have ticks
-tck_fielddata %>% filter(!is.na(sampleID)) %>% pull(targetTaxaPresent) %>% table() # true
+tck_fielddata_filtered %>% filter(!is.na(sampleID)) %>% pull(targetTaxaPresent) %>% table() # true
 
 # sampleID only assigned when there were ticks present; all missing sample IDs are for drags with no ticks (good)
 # for now, retain sampling events without ticks
 
 # make sure sample IDs are unique
-tck_fielddata %>% group_by(sampleID) %>% summarise(n = n()) %>% filter(n > 1) # yes all unique
-sum(duplicated(na.omit(tck_fielddata$sampleID)))
+tck_fielddata_filtered %>% group_by(sampleID) %>% summarise(n = n()) %>% filter(n > 1) # yes all unique
+sum(duplicated(na.omit(tck_fielddata_filtered$sampleID)))
 
 # check that drags with ticks present have a sample ID
-tck_fielddata %>% filter(targetTaxaPresent == "Y" & is.na(sampleID)) # none are missing S.ID
+tck_fielddata_filtered %>% filter(targetTaxaPresent == "Y" & is.na(sampleID)) # none are missing S.ID
 
 ### Check Counts vs. NAs 
 
-table(tck_fielddata$targetTaxaPresent, year(tck_fielddata$collectDate))
 # make sure samples with ticks present have counts
-tck_fielddata %>% filter(targetTaxaPresent == "Y") %>%
+tck_fielddata_filtered %>% filter(targetTaxaPresent == "Y") %>%
   filter(is.na(adultCount) & is.na(nymphCount) & is.na(larvaCount)) %>% nrow()
 
-# after 2019, the counts were done by taxonomists (need to varify this but if so this code may need updating...)
-
-
-# samples without ticks should have 0 counts
-tck_fielddata %>% filter(targetTaxaPresent == "N") %>% select(adultCount, nymphCount, larvaCount) %>% summarise_all(~sum(is.na(.))) 
-tck_fielddata %>% filter(targetTaxaPresent == "N" , is.na(adultCount)) %>% View(
-  
-)
-
-# fill these in with 0s
-tck_fielddata %>% mutate(adultCount = ifelse(targetTaxaPresent == "N" & totalSampledArea > 0 & is.na(adultCount), 0, adultCount),
-                         nymphCount = ifelse(targetTaxaPresent=="N" & totalSampledArea > 0 & is.na(nymphCount), 0, nymphCount),
-                         larvaCount = ifelse(targetTaxaPresent == "N" & totalSampledArea >0 & is.na(larvaCount),0, larvaCount)) -> tck_fielddata
-
 # are there any 0 counts where there should be > 0?
-tck_fielddata %>% filter(targetTaxaPresent == "Y") %>% mutate(totalCount = adultCount + nymphCount + larvaCount) %>% filter(totalCount == 0) # no
+tck_fielddata_filtered %>% filter(targetTaxaPresent == "Y") %>% mutate(totalCount = adultCount + nymphCount + larvaCount) %>% filter(totalCount == 0) # no
 
 
 ### Check for other missing count data
@@ -147,9 +143,8 @@ tck_fielddata %>% filter(targetTaxaPresent == "Y") %>% mutate(totalCount = adult
 req_cols <- c("siteID", "plotID", "collectDate", "adultCount", "nymphCount", "larvaCount")
 
 
-# remove ones without
-tck_fielddata %>% select(req_cols) %>% summarise_all(~sum(is.na(.))) # MYC
-
+# all should have no NAs
+tck_fielddata_filtered %>% select(req_cols) %>% summarise_all(~sum(is.na(.))) 
 
 
 ####################################
@@ -159,52 +154,59 @@ tck_fielddata %>% select(req_cols) %>% summarise_all(~sum(is.na(.))) # MYC
 ### replace "" with NA
 tck_taxonomyProcessed %>% mutate_if(.predicate = is.character, .funs = repl_na) -> tck_taxonomyProcessed
 
-### check that sample IDs match across tick field and tick tax
-
-# are all the tax sample IDs in the field table?
-tck_taxonomyProcessed %>% filter(!sampleID %in% tck_fielddata$sampleID) %>% nrow() #yes
+### verify again that all are in the field dataset
+tck_taxonomyProcessed %>% filter(sampleID %in% tck_fielddata_filtered$sampleID) -> tck_tax_filtered
 
 ### check sample quality flags
-table(tck_taxonomyProcessed$sampleCondition) 
+table(tck_tax_filtered$sampleCondition) 
+
 # none of these are deal breakers but just keep those deemed OK
-tck_taxonomyProcessed %>% filter(sampleCondition == "OK") -> tck_taxonomyProcessed
+tck_tax_filtered %>% filter(sampleCondition == "OK") -> tck_tax_filtered
 
 ### check for NAs in fields 
-tck_taxonomyProcessed %>% select(everything()) %>% summarise_all(funs(sum(is.na(.))))
-tck_taxonomyProcessed %>% select(everything()) %>% summarise_all(~sum(is.na(.))) # MYC 
+tck_tax_filtered %>% select(everything()) %>% summarise_all(~sum(is.na(.))) 
 
-tck_taxonomyProcessed %>% filter(!is.na(identifiedDate)) %>% filter(!is.na(acceptedTaxonID)) -> tck_taxonomyProcessed
+# require date and taxon ID
+tck_tax_filtered %>% filter(is.na(identifiedDate))
+tck_tax_filtered %>% filter(is.na(acceptedTaxonID))
+table(tck_taxonomyProcessed$remarks)
+str_detect_all(tck_tax_filtered$remarks, c("insects!", "may not be target species",
+                                            "mites", "not a tick", "NOT A TICK!"))
+not_tick <- which(tck_tax_filtered$remarks == )
+# taxon IDs indicate samples are not ticks; adjust counts.
+
+
 
 # epithet are all NAs (don't need these columns)
-table(tck_taxonomyProcessed$infraspecificEpithet)
+table(tck_tax_filtered$infraspecificEpithet)
 
-# qualifier not sure how to interpret this
-table(tck_taxonomyProcessed$identificationQualifier)
+# qualifier 
+table(tck_tax_filtered$identificationQualifier)
 
 # legacy data is the only flag (OK)
-table(tck_taxonomyProcessed$dataQF) 
+table(tck_tax_filtered$dataQF) 
 
-# minor remarks
-unique(tck_taxonomyProcessed$remarks)
+# remarks: some seem relevant for reconciling field and lab
+unique(tck_tax_filtered$remarks)
 
 ### check that the IDs all make sense
-table(tck_taxonomyProcessed$acceptedTaxonID)
-table(tck_taxonomyProcessed$taxonRank)
-table(tck_taxonomyProcessed$family)
+table(tck_tax_filtered$acceptedTaxonID)
+table(tck_tax_filtered$taxonRank)
+table(tck_tax_filtered$family)
 
-tck_taxonomyProcessed %>% filter(taxonRank == "order") %>% pull(acceptedTaxonID) %>% table()# some were just ID'd to order and all are IXOSP2
-tck_taxonomyProcessed %>% filter(taxonRank == "family") %>% pull(acceptedTaxonID) %>% table()
-tck_taxonomyProcessed %>% filter(taxonRank == "species") %>% pull(acceptedTaxonID) %>% table()
+tck_tax_filtered %>% filter(taxonRank == "order") %>% pull(acceptedTaxonID) %>% table()# some were just ID'd to order and all are IXOSP2
+tck_tax_filtered %>% filter(taxonRank == "family") %>% pull(acceptedTaxonID) %>% table()
+tck_tax_filtered %>% filter(taxonRank == "species") %>% pull(acceptedTaxonID) %>% table()
 
 ### sex or age columns
-table(tck_taxonomyProcessed$sexOrAge)
-tck_taxonomyProcessed %>% filter(is.na(sexOrAge)) # all have sex or age
-tck_taxonomyProcessed %>% filter(individualCount==0 | is.na(individualCount)) %>% nrow() # all have counts
+table(tck_tax_filtered$sexOrAge)
+tck_tax_filtered %>% filter(is.na(sexOrAge)) # all have sex or age
+tck_tax_filtered %>% filter(individualCount==0 | is.na(individualCount)) %>% nrow() # all have counts
 
 # create a lifestage column so tax counts can be compared to field data
-tck_taxonomyProcessed %>% mutate(lifeStage = case_when(sexOrAge == "Male" | sexOrAge == "Female" ~ "Adult",
+tck_tax_filtered %>% mutate(lifeStage = case_when(sexOrAge == "Male" | sexOrAge == "Female" ~ "Adult",
                                          sexOrAge == "Larva" ~ "Larva",
-                                         sexOrAge == "Nymph" ~ "Nymph")) -> tck_taxonomyProcessed
+                                         sexOrAge == "Nymph" ~ "Nymph")) -> tck_tax_filtered
 # this assumes that any ticks that were sexed must be adults (I couldn't confirm this)
 
 #########################################
@@ -221,25 +223,25 @@ tck_taxonomyProcessed %>% mutate(lifeStage = case_when(sexOrAge == "Male" | sexO
 
 
 # first check for dup colnames
-intersect(colnames(tck_fielddata), colnames(tck_taxonomyProcessed))
+intersect(colnames(tck_fielddata_filtered), colnames(tck_tax_filtered))
 
 # rename columns containing data unique to each dataset
-colnames(tck_fielddata)[colnames(tck_fielddata)=="uid"] <- "uid_field"
-colnames(tck_fielddata)[colnames(tck_fielddata)=="sampleCondition"] <- "sampleCondition_field"
-colnames(tck_fielddata)[colnames(tck_fielddata)=="remarks"] <- "remarks_field"
-colnames(tck_fielddata)[colnames(tck_fielddata)=="dataQF"] <- "dataQF_field"
-colnames(tck_fielddata)[colnames(tck_fielddata)=="publicationDate"] <- "publicationDate_field"
+colnames(tck_fielddata_filtered)[colnames(tck_fielddata_filtered)=="uid"] <- "uid_field"
+colnames(tck_fielddata_filtered)[colnames(tck_fielddata_filtered)=="sampleCondition"] <- "sampleCondition_field"
+colnames(tck_fielddata_filtered)[colnames(tck_fielddata_filtered)=="remarks"] <- "remarks_field"
+colnames(tck_fielddata_filtered)[colnames(tck_fielddata_filtered)=="dataQF"] <- "dataQF_field"
+colnames(tck_fielddata_filtered)[colnames(tck_fielddata_filtered)=="publicationDate"] <- "publicationDate_field"
 
-colnames(tck_taxonomyProcessed)[colnames(tck_taxonomyProcessed)=="uid"] <- "uid_tax"
-colnames(tck_taxonomyProcessed)[colnames(tck_taxonomyProcessed)=="sampleCondition"] <- "sampleCondition_tax"
-colnames(tck_taxonomyProcessed)[colnames(tck_taxonomyProcessed)=="remarks"] <- "remarks_tax"
-colnames(tck_taxonomyProcessed)[colnames(tck_taxonomyProcessed)=="dataQF"] <- "dataQF_tax"
-colnames(tck_taxonomyProcessed)[colnames(tck_taxonomyProcessed)=="publicationDate"] <- "publicationDate_tax"
+colnames(tck_tax_filtered)[colnames(tck_tax_filtered)=="uid"] <- "uid_tax"
+colnames(tck_tax_filtered)[colnames(tck_tax_filtered)=="sampleCondition"] <- "sampleCondition_tax"
+colnames(tck_tax_filtered)[colnames(tck_tax_filtered)=="remarks"] <- "remarks_tax"
+colnames(tck_tax_filtered)[colnames(tck_tax_filtered)=="dataQF"] <- "dataQF_tax"
+colnames(tck_tax_filtered)[colnames(tck_tax_filtered)=="publicationDate"] <- "publicationDate_tax"
 
 # in order to merge counts with field data we will first combine counts from male/female in the tax column into one adult class
 # if male/female were really of interest you could skip this (but the table will just be much wider since all will have a M-F option)
 
-tck_taxonomyProcessed %>% group_by(sampleID, acceptedTaxonID, lifeStage) %>% summarise(individualCount = sum(individualCount, na.rm = TRUE)) -> tck_tax_lifestage
+tck_tax_filtered %>% group_by(sampleID, acceptedTaxonID, lifeStage) %>% summarise(individualCount = sum(individualCount, na.rm = TRUE)) -> tck_tax_lifestage
 
 # make tick taxonomy wide; now only one row per sample id
 tck_tax_lifestage %>% pivot_wider(id_cols = sampleID,  names_from = c(acceptedTaxonID, lifeStage), values_from = individualCount) -> tck_tax_wide
@@ -249,12 +251,18 @@ tck_tax_wide %>% replace(is.na(.), 0) -> tck_tax_wide
 # each row is now be a unique sample id
 
 sum(duplicated(tck_tax_wide$sampleID)) # none are duplicated
-length(unique(tck_tax_wide$sampleID)) ==length(unique(na.omit(tck_fielddata$sampleID)))  # some are missing from either side
+sum(duplicated(na.omit(tck_fielddata_filtered$sampleID)))
+length(unique(tck_tax_wide$sampleID))
 
-tck_fielddata %>% filter(sampleID %in% tck_tax_wide$sampleID | is.na(sampleID)) -> tck_fielddata
-tck_tax_wide %>% filter(sampleID %in% tck_fielddata$sampleID) -> tck_tax_wide
+length(unique(na.omit(tck_fielddata_filtered$sampleID)))  # some are missing from either side
 
-tck_fielddata %>% left_join(tck_tax_wide, by = "sampleID") -> tck_merged
+na.omit(tck_fielddata_filtered$sampleID)[which(!na.omit(tck_fielddata_filtered$sampleID) %in% tck_tax_wide$sampleID)]
+
+# filter the field data again
+tck_fielddata_filtered %>% filter(sampleID %in% tck_tax_wide$sampleID | is.na(sampleID)) -> tck_fielddata_filtered
+tck_tax_wide %>% filter(sampleID %in% tck_fielddata_filtered$sampleID) -> tck_tax_wide
+
+tck_fielddata_filtered %>% left_join(tck_tax_wide, by = "sampleID") -> tck_merged
 
 ### clean up 0s
 # if ticks were not found, counts should be 0
@@ -515,7 +523,7 @@ tck_merged_final %>% left_join(tax_rank, by = "acceptedTaxonID") -> tck_merged_f
 tck_merged_final %>% select(uid_field, acceptedTaxonID, IndividualCount) %>% group_by(uid_field, acceptedTaxonID) %>%
   summarise(IndividualCount =  sum(IndividualCount)) %>% pivot_wider(id_cols = uid_field, names_from = acceptedTaxonID, values_from = IndividualCount) -> tck_site_species_table
 
-tck_fielddata %>% filter(uid_field %in% tck_site_species_table$uid_field) %>% select(-adultCount, -nymphCount, -larvaCount)-> tck_site_species_env
+tck_fielddata_filtered %>% filter(uid_field %in% tck_site_species_table$uid_field) %>% select(-adultCount, -nymphCount, -larvaCount)-> tck_site_species_env
 
 
 ########################################
