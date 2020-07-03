@@ -8,6 +8,7 @@
 # ecocomp
 # fix the unassigned code and simplify 
 # fix comments
+devtools::install_github('NEONScience/NEON-utilities/neonUtilities')
 
 library(tidyverse)
 library(neonUtilities)
@@ -19,13 +20,24 @@ library(lubridate)
 
 # Tick Abundance and field data data are in DP1.10093.001
 
-# modify this loop for GitHub repo structure (e.g. data raw folder name)
+# modify this code for GitHub repo structure (e.g. data raw folder name)
 
-if(!file.exists("data_raw/tck_sitexspecies.Rdata") |
-   !file.exists("data_raw/tck_sitexspecies_env.Rdata") |
-   !file.exists("data_raw/tck_longform.Rdata")){
-  Tick_all <- loadByProduct(dpID = "DP1.10093.001", site = "all", package = "expanded", check.size = F) # downloads from NEON and loads to env
+if(file.exists("data_raw/tck_fielddata.Rdata") & file.exists("data_raw/tck_taxonomyProcessed.Rdata")){
+  load("data_raw/tck_fielddata.Rdata")
+  load("data_raw/tck_taxonomyProcessed.Rdata")
+} else {
+  Tick_all <- loadByProduct(dpID = "DP1.10093.001",
+                            package = "basic", check.size = F) # downloads from NEON and loads to env
+  Tick_all <- list(tck_fielddata = 1, tck_taxonomyProcessed = 1, tck_taxonomyRaw = 1)
+  tck_fielddata <- Tick_all$tck_fielddata
+  tck_tax <- Tick_all$tck_taxonomyProcessed
+  tck_tax_raw <- Tick_all$tck_taxonomyRaw
+}
 
+# tck_taxonomyProcessed and tck_fielddata are the two datasets we want 
+
+
+##### Optional: fixing loadByProduct errors ####
   # #### If you get an error with regexp in list.files, and the above doesn't work:
   # zipsByProduct(dpID="DP1.10093.001", site="all", package = "expanded", check.size = F, savepath = ".//data_raw")
   # stackByTable(filepath = "./data_raw/filesToStack10093/", savepath = "./data_raw/filesToStack10093/") # in R-4.0.0, MacOS Mojave v10.14.6, it will stack but won't delete raw files.
@@ -36,12 +48,10 @@ if(!file.exists("data_raw/tck_sitexspecies.Rdata") |
   # tck_tax <- read.csv("./data_raw/filesToStack10093/stackedFiles/tck_taxonomyProcessed.csv", header=TRUE, stringsAsFactors = FALSE)
   # tck_tax_raw <- read.csv("./data_raw/filesToStack10093/stackedFiles/tck_taxonomyRaw.csv", header=TRUE, stringsAsFactors = FALSE)
   # Tick_all <- list(tck_fielddata=(tck_fielddata),tck_taxonomyProcessed=(tck_tax),tck_taxonomyRaw=(tck_tax_raw))
-}
 
-# tck_taxonomyProcessed and tck_fielddata are the two datasets we want 
-tck_fielddata <- Tick_all$tck_fielddata
-tck_tax <- Tick_all$tck_taxonomyProcessed
-tck_tax_raw <- Tick_all$tck_taxonomyRaw
+
+
+
 
 ###########################################
 # CLEAN TICK FIELD DATA #
@@ -50,6 +60,7 @@ tck_tax_raw <- Tick_all$tck_taxonomyRaw
 #### NAs
 # replace empty characters with NAs instead of ""
 repl_na <- function(x) ifelse(x=="", NA, x)
+
 tck_fielddata %>% mutate_if(.predicate = is.character, .funs = repl_na) -> tck_fielddata
 
 # check which fields have NAs
