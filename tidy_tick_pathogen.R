@@ -13,7 +13,6 @@ library(lubridate)
 keepLOG <- TRUE
 
 if(!file.exists("./data_raw/filesToStack10092/stackedFiles/tck_pathogen.csv")){
-  # tick_pathogen <- loadByProduct(dpID = "DP1.10092.001", site = "all", package = "expanded", check.size = F) # downloads from NEON and loads to env
   zipsByProduct(dpID="DP1.10092.001", site="all", package = "expanded", check.size = F, savepath = "./data_raw/")
   stackByTable(filepath = "./data_raw/filesToStack10092/", savepath = "./data_raw/filesToStack10092/")
 }
