@@ -6,11 +6,6 @@
 # add total identified column
 # add total tick column
 # ecocomp
-# fix the unassigned code and simplify 
-# fix comments
-# if there are < ticks in lab AND remarks about mites, insects, etc then trust the lab count
-# if there are < ticks in lab AND counts are > 100, trust the field count
-
 
 library(tidyverse) # for data wrangling and piping (dplyr probably ok)
 library(neonUtilities) # for downloading data (use GitHub version)
@@ -143,7 +138,7 @@ req_cols <- c("siteID", "plotID", "collectDate", "adultCount", "nymphCount", "la
 # all should have no NAs
 tck_fielddata_filtered %>% select(req_cols) %>% summarise_all(~sum(is.na(.))) 
 
-
+rm(req_cols)
 ####################################
 # CLEAN TICK TAXONOMY DATA 
 ####################################
@@ -335,8 +330,6 @@ tck_merged$CountFlag[tck_merged$totalCount_field < tck_merged$totalCount_tax] <-
 table(tck_merged$CountFlag)
 # the vast majority of counts match. 
 
-# add columns to lump unidentified counts
-tck_merged %>% mutate(UNIDENTIFIED_Larva = 0, UNIDENTIFIED_Nymph = 0, UNIDENTIFIED_Adult = 0) -> tck_merged
 
 #### FIX COUNT 2.1 RECONCILE DISCREPANCIES WHERE TOTALS MATCH #####
 
@@ -359,15 +352,15 @@ table(tck_merged$CountFlag)
 # mostly cases where nymphs turned out to be another taxonomic class
 tck_merged %>% mutate(CountFlag = ifelse(CountFlag == 2 & IDflag == "ID WRONG", 0, CountFlag)) -> tck_merged
 
-## if there were more larvae in the field than in lab, the extra larvae should be added to IXOSP_Larva 
+## if there were more larvae in the field than in lab, the extra larvae should be added to the order level (IXOSP2)
 # larvae weren't always identified/counted in the lab, or if they were, only counted up to a point
 # "extra larvae" = larvae not counted - those moved to another lifestage
 tck_merged %>% mutate(
-  IXOSP_Larva = ifelse(
+  IXOSP2_Larva = ifelse(
     CountFlag == 2 & larvaCount>totalLarva_tax & is.na(IDflag), # if the larval numbers are off
     # New IXOSP Larvae is the old count + discrepancy - those assigned to other lifestages
-    IXOSP_Larva + (larvaCount - totalLarva_tax) + (nymphCount - totalNymph_tax) + (larvaCount - totalLarva_tax), #
-  IXOSP_Larva)
+    IXOSP2_Larva + (larvaCount - totalLarva_tax) + (nymphCount - totalNymph_tax) + (larvaCount - totalLarva_tax), #
+    IXOSP2_Larva)
 ) -> tck_merged
 
 # remove flag
@@ -392,27 +385,38 @@ tck_merged %>% mutate(
 table(tck_merged$CountFlag)
 
 ## if counts are off by 1 or 2 and there are field remarks, assume ticks were lost
-# assign missing ticks to unidentified
+# assign missing ticks to order level IXOSP2
 # missing (unidentified) ticks = missing counts that were not assigned to other lifestages
 
+# if IXOSP2 doesn't exist for other lifestages, add it 
+if(sum(colnames(tck_merged) == "IXOSP2_Adult")==0){
+  tck_merged <- tck_merged %>% mutate(IXOSP2_Adult=0)
+}
+if(sum(colnames(tck_merged) == "IXOSP2_Nymph")==0){
+  tck_merged <- tck_merged %>% mutate(IXOSP2_Nymph=0)
+}
+if(sum(colnames(tck_merged) == "IXOSP2_Larva")==0){
+  tck_merged <- tck_merged %>% mutate(IXOSP2_Larva=0)
+}
+
 tck_merged %>% mutate(
-  UNIDENTIFIED_Adult = ifelse(
+  IXOSP2_Adult = ifelse(
     CountFlag == 2 & adultCount>totalAdult_tax & (adultCount-totalAdult_tax) <= 2 & !is.na(remarks_field), 
-    (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # count discrepancy --> unassigned
-    UNIDENTIFIED_Adult
+    IXOSP2_Adult+ (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # count discrepancy add to order IXOSP2
+    IXOSP2_Adult
   )) %>%
   mutate(
-    UNIDENTIFIED_Nymph = ifelse(
+    IXOSP2_Nymph = ifelse(
       CountFlag == 2 & nymphCount>totalNymph_tax & (nymphCount-totalNymph_tax) <= 2 & !is.na(remarks_field), 
-      (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # count discrepancy --> unassigned
-      UNIDENTIFIED_Nymph
+      IXOSP2_Nymph+ (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # count discrepancy add to order IXOSP2
+      IXOSP2_Nymph
     )
   ) %>%
   mutate(
-    UNIDENTIFIED_Larva = ifelse(
+    IXOSP2_Larva = ifelse(
       CountFlag == 2 & larvaCount>totalLarva_tax & (larvaCount-totalLarva_tax) <= 2 & !is.na(remarks_field), 
-      (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # count discrepancy --> unassigned
-      UNIDENTIFIED_Larva
+      IXOSP2_Larva+ (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), 
+      IXOSP2_Larva 
   )) -> tck_merged
 
 
@@ -430,25 +434,25 @@ tck_merged %>% mutate(
 
 
 ## some counts are off because over invoice limit 
-# in this case trust the field counts, and extra are unassigned
+# in this case trust the field counts, and extra are assigned to order level
 tck_merged %>% mutate(
-    UNIDENTIFIED_Nymph = ifelse(
+    IXOSP2_Nymph = ifelse(
       CountFlag == 2 & nymphCount>totalNymph_tax & IDflag == "INVOICE LIMIT", 
-      (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # count discrepancy --> unassigned
-      UNIDENTIFIED_Nymph
+      IXOSP2_Nymph+ (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # add count discrepancy to order
+      IXOSP2_Nymph
     )
   ) %>%
   mutate(
-    UNIDENTIFIED_Larva = ifelse(
+    IXOSP2_Larva = ifelse(
       CountFlag == 2 & larvaCount>totalLarva_tax & IDflag == "INVOICE LIMIT", 
-      (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # count discrepancy --> unassigned
-      UNIDENTIFIED_Larva
+      IXOSP2_Larva+ (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # add count discrepancy to order
+      IXOSP2_Larva
     )) %>%
   mutate(
-    UNIDENTIFIED_Adult = ifelse(
+    IXOSP2_Adult = ifelse(
     CountFlag == 2 & adultCount>totalAdult_tax & IDflag == "INVOICE LIMIT", 
-    (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # count discrepancy --> unassigned
-    UNIDENTIFIED_Adult
+    IXOSP2_Adult+ (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # add count discrepancy to order
+    IXOSP2_Adult
   )
     )-> tck_merged
 
@@ -485,12 +489,12 @@ tck_fielddata %>% filter(sampleID %in% lab.count.discrp)
 tck_taxonomyProcessed %>% filter(sampleID %in% lab.count.discrp)
 
 # no obvious issues with these. Trust lab count.
-
+rm(lab.count.discrp)
 
 #### Final notes on count data
 # note that some of these could have a "most likely" ID assigned based on what the majority of larval IDs are but the user can decide what to do with the unidentified.
 # or could just assign to highest taxonomic unit IXOSP
-
+# from this point on, trust lab rather than field counts
 
 #####################################################
 # RESHAPE FINAL DATASET
@@ -499,14 +503,19 @@ tck_taxonomyProcessed %>% filter(sampleID %in% lab.count.discrp)
 # will depend on the end user but creating two options
 # note that for calculation of things like richness, might want to be aware of the level of taxonomic resolution
 
+tck_merged %>% select(contains(c("_Larva", "_Nymph", "_Adult"))) %>% colnames() -> taxon.cols # columns containing counts per taxon
+
+
 ### option 1) long form data including 0s
 
 # get rid of excess columns (user discretion)
 tck_merged_final <- tck_merged %>% select(-CountFlag, -totalAdult_tax, -totalNymph_tax, -totalLarva_tax, -totalCount_tax, -totalCount_field,
                                           -nymphCount, -larvaCount, -adultCount, -coordinateUncertainty, -elevationUncertainty,
                                           -samplingImpractical, -measuredBy, -dataQF_field, -publicationDate_field)
+
+
 # long form data
-tck_merged_final %>% pivot_longer(cols = c(taxon.cols, UNIDENTIFIED_Larva, UNIDENTIFIED_Nymph, UNIDENTIFIED_Adult), names_to = "Species_LifeStage", values_to = "IndividualCount") %>%
+tck_merged_final %>% pivot_longer(cols = all_of(taxon.cols), names_to = "Species_LifeStage", values_to = "IndividualCount") %>%
   separate(Species_LifeStage, into = c("acceptedTaxonID", "LifeStage"), sep = "_", remove = FALSE) -> tck_merged_final
 
 
