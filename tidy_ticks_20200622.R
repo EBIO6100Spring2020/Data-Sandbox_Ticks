@@ -8,11 +8,15 @@
 # ecocomp
 # fix the unassigned code and simplify 
 # fix comments
+# if there are < ticks in lab AND remarks about mites, insects, etc then trust the lab count
+# if there are < ticks in lab AND counts are > 100, trust the field count
+
 
 library(tidyverse) # for data wrangling and piping (dplyr probably ok)
-library(neonUtilities) # for downloading data
+library(neonUtilities) # for downloading data (use GitHub version)
 library(lubridate) # for finding year from dates
 library(stringr)
+
 ###########################################
 #  LOAD TICK DATA FROM NEON OR FILE SOURCE 
 ###########################################
@@ -21,41 +25,34 @@ library(stringr)
 
 # modify this code for GitHub repo structure (e.g. data raw folder name)
 
-if(file.exists("data_raw/Tick_Raw_Stacked.Rdata")){
-  Tick_all <- readRDS("data_raw/Tick_Raw_Stacked.Rdata")
+# If data weren't already downloaded, download full NEON dataset
+# As of 7/6/20 loadByProduct had bugs if using the CRAN version of the package
+# Downloading the package NeonUtilities via Github solves the issue
+
+if(file.exists("data_raw/Tick_all.Rdata")){
+  Tick_all <- readRDS("data_raw/Tick_all.Rdata")
   list2env(Tick_all, globalenv())
 } else {
   Tick_all <- loadByProduct(dpID = "DP1.10093.001",
-                            package = "basic", check.size = F) # downloads from NEON and loads to env (currently buggy)
+                            package = "expanded", check.size = F) 
   list2env(Tick_all, globalenv())
+  saveRDS(Tick_all, "data_raw/Tick_all.Rdata")
 }
 
 # tck_taxonomyProcessed and tck_fielddata are the two datasets we want 
-
-
-##### Optional: fixing loadByProduct errors ####
-  # #### If you get an error with regexp in list.files, and the above doesn't work:
-  # zipsByProduct(dpID="DP1.10093.001", site="all", package = "expanded", check.size = F, savepath = ".//data_raw")
-  # stackByTable(filepath = "./data_raw/filesToStack10093/", savepath = "./data_raw/filesToStack10093/") # in R-4.0.0, MacOS Mojave v10.14.6, it will stack but won't delete raw files.
-  # #### manually delete "raw" files
-  # fileNames <- list.files(path="./data_raw/filesToStack10093/", pattern = "NEON[.]", include.dirs = TRUE, full.names = TRUE)
-  # unlink(fileNames, recursive = TRUE)
-  # tck_fielddata <- read.csv("./data_raw/filesToStack10093/stackedFiles/tck_fielddata.csv", header=TRUE, stringsAsFactors = FALSE)
-  # tck_taxonomyProcessed <- read.csv("./data_raw/filesToStack10093/stackedFiles/tck_taxonomyProcessed.csv", header=TRUE, stringsAsFactors = FALSE)
-  # tck_tax_raw <- read.csv("./data_raw/filesToStack10093/stackedFiles/tck_taxonomyRaw.csv", header=TRUE, stringsAsFactors = FALSE)
-  # Tick_all <- list(tck_fielddata=(tck_fielddata),tck_taxonomyProcessed=(tck_taxonomyProcessed),tck_taxonomyRaw=(tck_tax_raw))
-
 
 ###########################################
 # NOTES ON GENERAL DATA ISSUES #
 ###########################################
 
-# Issue: the latency between field (30 days) and lab (300 days) is different
-# In 2019, counts were switched over to the lab instead of the field
+# Issue 1: the latency between field (30 days) and lab (300 days) is different
+# In 2019, tick counts were switched over to the lab instead of the field
 # If the samples aren't processed yet, there will be an NA for all the counts (even if there weren't taxa present)
 # Therefore, if ticks weren't present (targetTaxaPresent == "N"), we do NOT want to assign a count of 0
-# Doing so would mean that later dates have ONLY 0s for counts. Rather, we should not use those dates until the lab data come in
-# larva counts were only started in later years; requiring them will remove earlier years
+# Doing so would mean that later dates have only 0s for counts creating bias. 
+# Rather, we should not use those dates until the lab data come in
+
+# Issue 2: larva counts were only started in later years; requiring them will remove earlier years
 
 ###########################################
 # CLEAN TICK FIELD DATA #
@@ -85,7 +82,7 @@ tck_fielddata_filtered %>% filter(!is.na(adultCount), !is.na(nymphCount), !is.na
 
 #### Check correspondence between field and lab
 # Making the assumption that the user only cares about ID'd ticks and not raw abundances.
-# If so,  only include field records corresponding to the records that have lab dates
+# If so, only include field records corresponding to the dates with lab data
 
 # Are all the field samples that were assigned a sample ID in the tax table?
 tck_fielddata_filtered %>% filter(!sampleID %in% tck_taxonomyProcessed$sampleID, !is.na(sampleID)) %>% nrow()
@@ -107,9 +104,9 @@ length(unique(tck_taxonomyProcessed$sampleID)) # match
 #### Check other quality control/sample remarks
 
 table(tck_fielddata_filtered$sampleCondition) # none of these are major issues
-table(tck_fielddata_filtered$dataQF) # many are legacy data
+table(tck_fielddata_filtered$dataQF) # legacy data only
 
-tck_fielddata_filtered %>% filter(dataQF == "legacyData") %>% mutate(year = year(collectDate)) %>% pull(year) %>% table() # all from 2014 and 2015 (leave for now, if they contain all necessary data)
+tck_fielddata_filtered %>% filter(dataQF == "legacyData") %>% mutate(year = year(collectDate)) %>% pull(year) %>% table() # from earlier years (keep for now)
 
 ##### Sample IDs
 # check that all of the rows WITHOUT a sample ID have no ticks
@@ -166,15 +163,27 @@ tck_tax_filtered %>% filter(sampleCondition == "OK") -> tck_tax_filtered
 ### check for NAs in fields 
 tck_tax_filtered %>% select(everything()) %>% summarise_all(~sum(is.na(.))) 
 
-# require date and taxon ID
-tck_tax_filtered %>% filter(is.na(identifiedDate))
-tck_tax_filtered %>% filter(is.na(acceptedTaxonID))
-table(tck_taxonomyProcessed$remarks)
-str_detect_all(tck_tax_filtered$remarks, c("insects!", "may not be target species",
-                                            "mites", "not a tick", "NOT A TICK!"))
-not_tick <- which(tck_tax_filtered$remarks == )
-# taxon IDs indicate samples are not ticks; adjust counts.
 
+### create a flag for bad IDs 
+table(tck_taxonomyProcessed$remarks)
+
+tck_fielddata_filtered$IDflag <- NA
+
+# sample IDs with taxonomy issues
+tck_taxonomyProcessed %>% filter(str_detect(remarks, "insect|mite|not a tick|NOT A TICK|arachnid|spider")) %>% pull(sampleID) -> tax.issues
+
+tck_fielddata_filtered$IDflag[which(tck_fielddata_filtered$sampleID %in% tax.issues)] <- "ID WRONG"
+
+# sample IDs where lab reached limit and stopped counting
+tck_taxonomyProcessed %>% filter(str_detect(remarks, "billing limit|invoice limit")) %>% pull(sampleID) -> invoice.issues
+
+tck_fielddata_filtered$IDflag[which(tck_fielddata_filtered$sampleID %in% invoice.issues)] <- "INVOICE LIMIT"
+
+rm(tax.issues, invoice.issues)
+
+# require date and taxon ID
+tck_tax_filtered %>% filter(!is.na(identifiedDate)) -> tck_tax_filtered
+tck_tax_filtered %>% filter(!is.na(acceptedTaxonID))-> tck_tax_filtered
 
 
 # epithet are all NAs (don't need these columns)
@@ -184,13 +193,18 @@ table(tck_tax_filtered$infraspecificEpithet)
 table(tck_tax_filtered$identificationQualifier)
 
 # legacy data is the only flag (OK)
-table(tck_tax_filtered$dataQF) 
+table(tck_tax_filtered$dataQF)
 
-# remarks: some seem relevant for reconciling field and lab
+# other remarks: some seem relevant for reconciling field and lab
 unique(tck_tax_filtered$remarks)
 
 ### check that the IDs all make sense
-table(tck_tax_filtered$acceptedTaxonID)
+table(tck_tax_filtered$acceptedTaxonID) # IXOSPP and IXOSPP1?
+tck_tax_filtered %>% filter(acceptedTaxonID == "IXOSPP1") # genus ixodes (Ixodes spp.)
+tck_tax_filtered %>% filter(acceptedTaxonID == "IXOSPP") # family ixodidae
+tck_tax_filtered %>% filter(acceptedTaxonID == "IXOSP2") # order ixodes (Ixodida sp.)
+tck_tax_filtered %>% filter(acceptedTaxonID == "IXOSP") # family exodidae (Ixodidae sp.)
+
 table(tck_tax_filtered$taxonRank)
 table(tck_tax_filtered$family)
 
@@ -241,10 +255,10 @@ colnames(tck_tax_filtered)[colnames(tck_tax_filtered)=="publicationDate"] <- "pu
 # in order to merge counts with field data we will first combine counts from male/female in the tax column into one adult class
 # if male/female were really of interest you could skip this (but the table will just be much wider since all will have a M-F option)
 
-tck_tax_filtered %>% group_by(sampleID, acceptedTaxonID, lifeStage) %>% summarise(individualCount = sum(individualCount, na.rm = TRUE)) -> tck_tax_lifestage
-
-# make tick taxonomy wide; now only one row per sample id
-tck_tax_lifestage %>% pivot_wider(id_cols = sampleID,  names_from = c(acceptedTaxonID, lifeStage), values_from = individualCount) -> tck_tax_wide
+tck_tax_filtered %>% group_by(sampleID, acceptedTaxonID, lifeStage) %>%
+  summarise(individualCount = sum(individualCount, na.rm = TRUE)) %>%
+ # now make it wide;  only one row per sample id
+  pivot_wider(id_cols = sampleID,  names_from = c(acceptedTaxonID, lifeStage), values_from = individualCount)  -> tck_tax_wide
 
 # replace NAs with 0s
 tck_tax_wide %>% replace(is.na(.), 0) -> tck_tax_wide
@@ -254,32 +268,34 @@ sum(duplicated(tck_tax_wide$sampleID)) # none are duplicated
 sum(duplicated(na.omit(tck_fielddata_filtered$sampleID)))
 length(unique(tck_tax_wide$sampleID))
 
-length(unique(na.omit(tck_fielddata_filtered$sampleID)))  # some are missing from either side
-
-na.omit(tck_fielddata_filtered$sampleID)[which(!na.omit(tck_fielddata_filtered$sampleID) %in% tck_tax_wide$sampleID)]
-
-# filter the field data again
-tck_fielddata_filtered %>% filter(sampleID %in% tck_tax_wide$sampleID | is.na(sampleID)) -> tck_fielddata_filtered
-tck_tax_wide %>% filter(sampleID %in% tck_fielddata_filtered$sampleID) -> tck_tax_wide
-
 tck_fielddata_filtered %>% left_join(tck_tax_wide, by = "sampleID") -> tck_merged
 
+#########################################################
+#FIX COUNT DISCREPANCIES BETWEEN FIELD AND LAB #
+#########################################################
+
 ### clean up 0s
-# if ticks were not found, counts should be 0
+# if ticks were not found in the field, counts should be 0
+# e.g. for all the records in field data that don't have an associated lab record, counts are 0
+
 tck_merged %>% select(contains(c("_Nymph", "_Adult" , "_Larva"))) %>% colnames() -> taxon.cols # columns containing counts per taxon
 
 for(i in 1:length(taxon.cols)){
   tck_merged[which(tck_merged$targetTaxaPresent =="N"), which(colnames(tck_merged) == taxon.cols[i])] = 0
 }
 
+### check for NA
 # check for NAs in the count columns
-
-# tck_merged %>% select_if(is_numeric)%>% summarise_all(funs(sum(is.na(.))))
-tck_merged %>% select_if(is_numeric)%>% summarise_all(~sum(is.na(.))) ### MYC
-
-#########################################################
-#FIX COUNT DISCREPANCIES BETWEEN FIELD AND LAB #
-#########################################################
+tck_merged %>% select_if(is_numeric)%>% summarise_all(~sum(is.na(.))) 
+tck_merged %>% filter(is.na(IXOANG_Nymph)) %>% pull(uid_field) -> uid_correct # one record with NAs; because ID was wrong
+# manually correct this one
+tck_merged[which(tck_merged$uid_field==uid_correct), "targetTaxaPresent"] = "N"
+tck_merged[which(tck_merged$uid_field==uid_correct), "adultCount"] = 0
+tck_merged[which(tck_merged$uid_field==uid_correct), "nymphCount"] = 0
+tck_merged[which(tck_merged$uid_field==uid_correct), "larvaCount"] = 0
+for(i in 1:length(taxon.cols)){
+  tck_merged[which(tck_merged$uid_field==uid_correct), which(colnames(tck_merged) == taxon.cols[i])] = 0
+}
 
 #### FIX COUNT 1.1 FLAG DISCREPANCIES #####
 # first flag those where the counts might not match up
@@ -317,8 +333,6 @@ tck_merged$CountFlag[tck_merged$totalCount_field < tck_merged$totalCount_tax] <-
 
 ### reconcile count discrepancies
 table(tck_merged$CountFlag)
-sum(is.na(tck_merged$CountFlag))
-
 # the vast majority of counts match. 
 
 # add columns to lump unidentified counts
@@ -326,172 +340,156 @@ tck_merged %>% mutate(UNIDENTIFIED_Larva = 0, UNIDENTIFIED_Nymph = 0, UNIDENTIFI
 
 #### FIX COUNT 2.1 RECONCILE DISCREPANCIES WHERE TOTALS MATCH #####
 
-## Flag Type 1: the total count matches
+### Flag Type 1: the total count from field and lab matches
 tck_merged %>% filter(CountFlag == 1) %>% select(countCols) 
-
 # many of these are adults misidentified as nymphs or vice versa
-# trust the taxonomy counts here (ignore nymphCount, adultCount, larvaCount from field data)
+# trust the lab counts here (ignore nymphCount, adultCount, larvaCount from field data)
+tck_merged %>%  mutate(CountFlag = ifelse(CountFlag ==1, 0, CountFlag)) -> tck_merged
+table(tck_merged$CountFlag)
+
 
 #### FIX COUNT 2.2 RECONCILE DISCREPANCIES WHERE FIELD COUNT > TAX COUNT ####
-# more ticks found in the field than in the lab
+### Flag Type 2:more ticks found in the field than in the lab
+
 # in some cases, there were too many larvae and not all were ID'd
 # in other cases, there may be issues with the counts and some ended up not being ticks
 # if we can't rectify, lump the excess field ticks into 'unidentified'
 
-### first look at those where just the larval count is off (e.g. more larvae in field than in lab, but other counts match)
-tck_merged %>% filter(CountFlag==2) %>% filter(larvaCount!=totalLarva_tax,
-                                               adultCount == totalAdult_tax,
-                                               nymphCount ==  totalNymph_tax) %>% select(countCols)
+## if there are notes in the ID flag column, trust the lab count (remove flag)
+# mostly cases where nymphs turned out to be another taxonomic class
+tck_merged %>% mutate(CountFlag = ifelse(CountFlag == 2 & IDflag == "ID WRONG", 0, CountFlag)) -> tck_merged
 
-# how many cases are there?
-tck_merged %>% filter(CountFlag==2) %>% filter(larvaCount!=totalLarva_tax,
-                                               adultCount == totalAdult_tax,
-                                               nymphCount ==  totalNymph_tax) %>% pull(sampleID) -> larva.fix
-length(larva.fix) 
+## if there were more larvae in the field than in lab, the extra larvae should be added to IXOSP_Larva 
+# larvae weren't always identified/counted in the lab, or if they were, only counted up to a point
+# "extra larvae" = larvae not counted - those moved to another lifestage
+tck_merged %>% mutate(
+  IXOSP_Larva = ifelse(
+    CountFlag == 2 & larvaCount>totalLarva_tax & is.na(IDflag), # if the larval numbers are off
+    # New IXOSP Larvae is the old count + discrepancy - those assigned to other lifestages
+    IXOSP_Larva + (larvaCount - totalLarva_tax) + (nymphCount - totalNymph_tax) + (larvaCount - totalLarva_tax), #
+  IXOSP_Larva)
+) -> tck_merged
 
-# unidentified larvae: larvaCount - larvaCount_tax
-tck_merged$UNIDENTIFIED_Larva[which(tck_merged$sampleID %in% larva.fix)] <- tck_merged$larvaCount[which(tck_merged$sampleID %in% larva.fix)]  - tck_merged$totalLarva_tax[which(tck_merged$sampleID %in% larva.fix)] 
-tck_merged$CountFlag[which(tck_merged$sampleID %in% larva.fix)] <- "2f" # remove flag
-rm(larva.fix)
-
-### look at those where just the nymph count is off (e.g. more nymph in field than lab but other counts match)
-tck_merged %>% filter(CountFlag==2) %>% filter(larvaCount==totalLarva_tax,
-                                               adultCount == totalAdult_tax,
-                                               nymphCount !=  totalNymph_tax) %>% select(countCols)
-
-# how many cases are there?
-tck_merged %>% filter(CountFlag==2) %>% filter(larvaCount==totalLarva_tax,
-                                               adultCount == totalAdult_tax,
-                                               nymphCount !=  totalNymph_tax) %>% pull(sampleID) -> nymph.fix
-length(nymph.fix) 
-
-# unidentified nymph: nymph count - nymph count tax
-tck_merged$UNIDENTIFIED_Nymph[which(tck_merged$sampleID %in% nymph.fix)] <- tck_merged$nymphCount[which(tck_merged$sampleID %in% nymph.fix)]  - 
-  tck_merged$totalNymph_tax[which(tck_merged$sampleID %in% nymph.fix)] 
-
-tck_merged$CountFlag[which(tck_merged$sampleID %in% nymph.fix)] <- "2f" # remove flag
-rm(nymph.fix)
-
-### look at those where just the adult count is off (e.g. more adult in field than lab but other counts match)
-tck_merged %>% filter(CountFlag==2) %>% filter(larvaCount==totalLarva_tax,
-                                               adultCount != totalAdult_tax,
-                                               nymphCount ==  totalNymph_tax) %>% select(countCols)
-
-# how many cases are there?
-tck_merged %>% filter(CountFlag==2) %>% filter(larvaCount==totalLarva_tax,
-                                               adultCount != totalAdult_tax,
-                                               nymphCount ==  totalNymph_tax) %>% pull(sampleID) -> adult.fix
-length(adult.fix) 
-
-# unidentified adult: adult count - adult count tax
-tck_merged$UNIDENTIFIED_Adult[which(tck_merged$sampleID %in% adult.fix)] <- tck_merged$adultCount[which(tck_merged$sampleID %in% adult.fix)]  - 
-  tck_merged$totalAdult_tax[which(tck_merged$sampleID %in% adult.fix)] 
-
-tck_merged$CountFlag[which(tck_merged$sampleID %in% adult.fix)] <- "2f" # remove flag
-rm(adult.fix)
-
-### cases where adults might be mistaken for nymphs
-tck_merged %>% filter(CountFlag==2) %>% filter(adultCount > totalAdult_tax,
-                                               nymphCount < totalNymph_tax,
-                                               larvaCount == totalLarva_tax) 
-# no cases but in here, the excess adults that are not in nymph tax would be classified as unidentified adults
+# remove flag
+tck_merged %>% mutate(
+  CountFlag = ifelse(
+    CountFlag == 2 & larvaCount>totalLarva_tax & is.na(IDflag), # if only the larval numbers are off
+    0, # new IXOSP Larva count is now the old count + (discrepancy between field and lab totals)
+    CountFlag
+  )
+) -> tck_merged
 
 
-### cases where some larvae are actually nymphs
-tck_merged %>% filter(CountFlag==2) %>% filter(adultCount == totalAdult_tax,
-                                               nymphCount < totalNymph_tax,
-                                               larvaCount > totalLarva_tax)  %>% pull(sampleID) -> larvae.fix
-# unidentified larvae : larvaCount (field) - totalLarva_tax + (nymphCount - totalNymph_tax)
-tck_merged$UNIDENTIFIED_Larva[which(tck_merged$sampleID %in% larvae.fix)] <- (tck_merged$larvaCount[which(tck_merged$sampleID %in% larvae.fix)]  - tck_merged$totalLarva_tax[which(tck_merged$sampleID %in% larvae.fix)]) +
-  (tck_merged$nymphCount[which(tck_merged$sampleID %in% larvae.fix)] - tck_merged$totalNymph_tax[which(tck_merged$sampleID %in% larvae.fix)])
-
-tck_merged$CountFlag[which(tck_merged$sampleID %in% larvae.fix)] <- "2f" # remove flag
-rm(larvae.fix)
-
-### cases where some nymphs are actually larvae
-tck_merged %>% filter(CountFlag==2) %>% filter(adultCount == totalAdult_tax,
-                                               nymphCount > totalNymph_tax,
-                                               larvaCount < totalLarva_tax)  %>% pull(sampleID) -> nymph.fix
-# unidentified nymph : nymphCount (field) - totalnymph_tax + (larvaeCount - larvae_tax)
-# number of nymphs not counted minus the excess larvae
-tck_merged$UNIDENTIFIED_Nymph[which(tck_merged$sampleID %in% nymph.fix)] <- (tck_merged$nymphCount[which(tck_merged$sampleID %in% nymph.fix)]  - tck_merged$totalNymph_tax[which(tck_merged$sampleID %in% nymph.fix)]) +
-  (tck_merged$larvaCount[which(tck_merged$sampleID %in% nymph.fix)] - tck_merged$totalLarva_tax[which(tck_merged$sampleID %in% nymph.fix)])
-
-tck_merged$CountFlag[which(tck_merged$sampleID %in% nymph.fix)] <- "2f" # remove flag
-rm(nymph.fix)
-
-### cases where some nymphs are actually adults
-tck_merged %>% filter(CountFlag==2) %>% filter(adultCount < totalAdult_tax,
-                                               nymphCount > totalNymph_tax,
-                                               larvaCount == totalLarva_tax)  %>% pull(sampleID) -> nymph.fix
-# unidentified nymph : nymphCount (field) - totalnymph_tax + (adultCount - totalAdult_tax)
-# number of nymphs not counted minus the excess adults
-tck_merged$UNIDENTIFIED_Nymph[which(tck_merged$sampleID %in% nymph.fix)] <- (tck_merged$nymphCount[which(tck_merged$sampleID %in% nymph.fix)]  - tck_merged$totalNymph_tax[which(tck_merged$sampleID %in% nymph.fix)]) +
-  (tck_merged$adultCount[which(tck_merged$sampleID %in% nymph.fix)] - tck_merged$totalAdult_tax[which(tck_merged$sampleID %in% nymph.fix)])
-
-tck_merged$CountFlag[which(tck_merged$sampleID %in% nymph.fix)] <- "2f" # remove flag
-rm(nymph.fix)
-
-
-### there are under-counts in adults and none are in the nymph/larval stage
-tck_merged %>% filter(CountFlag==2) %>% filter(adultCount > totalAdult_tax, # there are unidentified adults but none are nymph or larvae
-                                               nymphCount == totalNymph_tax | nymphCount > totalNymph_tax, larvaCount == totalLarva_tax | larvaCount > totalLarva_tax) %>%pull(sampleID) -> adult.fix
-
-tck_merged$UNIDENTIFIED_Adult[which(tck_merged$sampleID %in% adult.fix)] <- (tck_merged$adultCount[which(tck_merged$sampleID %in% adult.fix)]  - tck_merged$totalAdult_tax[which(tck_merged$sampleID %in% adult.fix)]) 
-
-tck_merged$CountFlag[which(tck_merged$sampleID %in% adult.fix)] <- "2f" # remove flag
-rm(adult.fix)
-
-### there are under-counts in nymphs and none are in the adult/larval stage
-tck_merged %>% filter(CountFlag==2) %>% filter(nymphCount > totalNymph_tax, # there are unidentified adults but none are nymph or larvae
-                                               adultCount == totalAdult_tax | adultCount > totalAdult_tax, larvaCount == totalLarva_tax | larvaCount > totalLarva_tax) %>%pull(sampleID) -> nymph.fix
-
-tck_merged$UNIDENTIFIED_Nymph[which(tck_merged$sampleID %in% nymph.fix)] <- (tck_merged$nymphCount[which(tck_merged$sampleID %in% nymph.fix)]  - tck_merged$totalNymph_tax[which(tck_merged$sampleID %in% nymph.fix)]) 
-
-tck_merged$CountFlag[which(tck_merged$sampleID %in% nymph.fix)] <- "2f" # remove flag
-rm(nymph.fix)
-
-
-### there are under-counts in larvae and none are in the adult/nymph stage
-tck_merged %>% filter(CountFlag==2) %>% filter(larvaCount > totalLarva_tax, # there are unidentified adults but none are nymph or larvae
-                                               adultCount == totalAdult_tax | adultCount > totalAdult_tax, nymphCount == totalNymph_tax | nymphCount > totalNymph_tax) %>%pull(sampleID) -> larva.fix
-
-tck_merged$UNIDENTIFIED_Larva[which(tck_merged$sampleID %in% larva.fix)] <- (tck_merged$larvaCount[which(tck_merged$sampleID %in% larva.fix)]  - tck_merged$totalLarva_tax[which(tck_merged$sampleID %in% larva.fix)]) 
-
-tck_merged$CountFlag[which(tck_merged$sampleID %in% larva.fix)] <- "2f" # remove flag
-rm(nymph.fix)
-
-
-
-### cases where some larvae are actually nymphs or adults
-tck_merged %>% filter(CountFlag==2) %>% filter(adultCount < totalAdult_tax,
-                                               nymphCount < totalNymph_tax,
-                                               larvaCount > totalLarva_tax)  %>% pull(sampleID) -> larvae.fix
-# unidentified larvae : larvaCount (field) - total_tax
-tck_merged$UNIDENTIFIED_Larva[which(tck_merged$sampleID %in% larvae.fix)] <- (tck_merged$larvaCount[which(tck_merged$sampleID %in% larvae.fix)]  - tck_merged$totalCount_tax[which(tck_merged$sampleID %in% larvae.fix)])
-tck_merged$CountFlag[which(tck_merged$sampleID %in% larvae.fix)] <- "2f" # remove flag
-rm(adult.fix)
-
+## if counts are off by < 10% trust the lab count data and remove flag
+tck_merged %>% mutate(
+  CountFlag = ifelse(
+    CountFlag == 2 & (totalCount_field - totalCount_tax)/totalCount_field < 0.1, # if only the larval numbers are off
+    0, # new IXOSP Larva count is now the old count + (discrepancy between field and lab totals)
+    CountFlag
+  )
+) -> tck_merged
 
 table(tck_merged$CountFlag)
+
+## if counts are off by 1 or 2 and there are field remarks, assume ticks were lost
+# assign missing ticks to unidentified
+# missing (unidentified) ticks = missing counts that were not assigned to other lifestages
+
+tck_merged %>% mutate(
+  UNIDENTIFIED_Adult = ifelse(
+    CountFlag == 2 & adultCount>totalAdult_tax & (adultCount-totalAdult_tax) <= 2 & !is.na(remarks_field), 
+    (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # count discrepancy --> unassigned
+    UNIDENTIFIED_Adult
+  )) %>%
+  mutate(
+    UNIDENTIFIED_Nymph = ifelse(
+      CountFlag == 2 & nymphCount>totalNymph_tax & (nymphCount-totalNymph_tax) <= 2 & !is.na(remarks_field), 
+      (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # count discrepancy --> unassigned
+      UNIDENTIFIED_Nymph
+    )
+  ) %>%
+  mutate(
+    UNIDENTIFIED_Larva = ifelse(
+      CountFlag == 2 & larvaCount>totalLarva_tax & (larvaCount-totalLarva_tax) <= 2 & !is.na(remarks_field), 
+      (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # count discrepancy --> unassigned
+      UNIDENTIFIED_Larva
+  )) -> tck_merged
+
+
+# remove flag
+
+tck_merged %>% mutate(
+  CountFlag = ifelse(
+    CountFlag == 2 & adultCount>totalAdult_tax & (adultCount-totalAdult_tax) <= 2 & !is.na(remarks_field), 0, CountFlag)) %>%
+  mutate(
+    CountFlag = ifelse(
+      CountFlag == 2 & nymphCount>totalNymph_tax & (nymphCount-totalNymph_tax) <=2 & !is.na(remarks_field), 0, CountFlag)) %>%
+  mutate(
+    CountFlag = ifelse(
+      CountFlag == 2 & larvaCount>totalLarva_tax & (larvaCount-totalLarva_tax) <=2 & !is.na(remarks_field), 0, CountFlag)) -> tck_merged
+
+
+## some counts are off because over invoice limit 
+# in this case trust the field counts, and extra are unassigned
+tck_merged %>% mutate(
+    UNIDENTIFIED_Nymph = ifelse(
+      CountFlag == 2 & nymphCount>totalNymph_tax & IDflag == "INVOICE LIMIT", 
+      (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # count discrepancy --> unassigned
+      UNIDENTIFIED_Nymph
+    )
+  ) %>%
+  mutate(
+    UNIDENTIFIED_Larva = ifelse(
+      CountFlag == 2 & larvaCount>totalLarva_tax & IDflag == "INVOICE LIMIT", 
+      (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # count discrepancy --> unassigned
+      UNIDENTIFIED_Larva
+    )) %>%
+  mutate(
+    UNIDENTIFIED_Adult = ifelse(
+    CountFlag == 2 & adultCount>totalAdult_tax & IDflag == "INVOICE LIMIT", 
+    (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # count discrepancy --> unassigned
+    UNIDENTIFIED_Adult
+  )
+    )-> tck_merged
+
+tck_merged %>% mutate(
+  CountFlag = ifelse(
+    CountFlag == 2 & adultCount>totalAdult_tax &IDflag == "INVOICE LIMIT" , 0, CountFlag)) %>%
+  mutate(
+    CountFlag = ifelse(
+      CountFlag == 2 & nymphCount>totalNymph_tax &IDflag == "INVOICE LIMIT" , 0, CountFlag)) %>%
+  mutate(
+    CountFlag = ifelse(
+      CountFlag == 2 & larvaCount>totalLarva_tax &IDflag == "INVOICE LIMIT" , 0, CountFlag)) -> tck_merged
+
+table(tck_merged$CountFlag) 
 
 #### FIX COUNT 2.3 RECONCILE DISCREPANCIES WHERE FIELD COUNT < TAX COUNT
 
-## case 1) counts are off by minor numbers (trust tax count) 
-# if the discrepancy is less than 20% of the total count or only 1 or two individuals
-tck_merged %>% filter(CountFlag == 3) %>% filter(abs(totalCount_tax-totalCount_field)/totalCount_tax < 0.2 |
-                                                   (totalCount_tax - totalCount_field)<=1) %>% pull(sampleID) -> ignore.diff
+## counts are off by minor numbers (trust tax count) 
+# if the discrepancy is less than 30% of the total count or 5 or less individuals
+# trust the lab count here
 
-tck_merged$CountFlag[which(tck_merged$sampleID %in% ignore.diff)] <- "3f"
-rm(ignore.diff)
-
-tck_merged %>% filter(CountFlag == 3) # in these cases, fine to also trust the tax counts (higher)
-
+tck_merged %>% mutate(
+  CountFlag = ifelse(
+    CountFlag == 3 & (abs(totalCount_tax-totalCount_field)/totalCount_tax < 0.3| (totalCount_tax - totalCount_field)<=5),
+  0, CountFlag
+  )
+) -> tck_merged
+  
 table(tck_merged$CountFlag)
 
-# all issues are resolved.
+tck_merged %>% filter(CountFlag == 3) %>% pull(sampleID) -> lab.count.discrp
 
-# note that some of these could have a "most likely" ID assigned based on what the majority of larval IDs are but the user can decide what to do with unidentified.
+tck_fielddata %>% filter(sampleID %in% lab.count.discrp)
+tck_taxonomyProcessed %>% filter(sampleID %in% lab.count.discrp)
+
+# no obvious issues with these. Trust lab count.
+
+
+#### Final notes on count data
+# note that some of these could have a "most likely" ID assigned based on what the majority of larval IDs are but the user can decide what to do with the unidentified.
+# or could just assign to highest taxonomic unit IXOSP
 
 
 #####################################################
