@@ -3,8 +3,6 @@
 # Date: 6/22/20
 
 ### to do list
-# add total identified column
-# add total tick column
 # ecocomp
 
 library(tidyverse) # for data wrangling and piping (dplyr probably ok)
@@ -154,7 +152,7 @@ rm(req_cols)
 ### replace "" with NA
 tck_tax_filtered %>% mutate_if(.predicate = is.character, .funs = repl_na) -> tck_tax_filtered
 
-### verify again that all are in the field dataset
+### only retain lab records that are also in the field dataset
 tck_tax_filtered %>% filter(sampleID %in% tck_fielddata_filtered$sampleID) -> tck_tax_filtered
 
 ### check sample quality flags
@@ -233,9 +231,10 @@ tck_tax_filtered %>% filter(is.na(sexOrAge)) # all have sex or age
 tck_tax_filtered %>% filter(individualCount==0 | is.na(individualCount)) %>% nrow() # all have counts
 
 # create a lifestage column so tax counts can be compared to field data
-tck_tax_filtered %>% mutate(lifeStage = case_when(sexOrAge == "Male" | sexOrAge == "Female" ~ "Adult",
+tck_tax_filtered %>% mutate(lifeStage = case_when(sexOrAge == "Male" | sexOrAge == "Female" | sexOrAge == "Adult" ~ "Adult",
                                          sexOrAge == "Larva" ~ "Larva",
                                          sexOrAge == "Nymph" ~ "Nymph")) -> tck_tax_filtered
+sum(is.na(tck_tax_filtered$lifeStage))
 # this assumes that any ticks that were sexed must be adults (I couldn't confirm this)
 
 #########################################
@@ -550,8 +549,9 @@ saveRDS(tck_merged_final, "data_raw/tck_longform.Rdata")
 ########################################
 # NOTES FOR END USERS  #
 #######################################
-
-# be aware of higher order taxa ID when looking at richness (e.g. can't just do row sums)
-# unidentified could be semi-identified by looking at most likely ID (e.g. if 200 of 700 larvae are IXOSP, very likely that the Unidentified larvae are IXOSP)
+# be aware of higher order taxa ID -- they are individuals ASSIGNED at a higher taxonomic class, rather than the sum of lower tax. class
+# higher order taxonomic assignments could be semi-identified by looking at most likely ID (e.g. if 200 of 700 larvae are IXOSPAC, very likely that the Unidentified larvae are IXOSP)
 # unidentified coudl be changed to IXOSPP across the board 
+# All combos of species-lifestage aren't in the long form (e.g. if there were never IXOAFF_Adult, it will be missing instead of 0)
+
 
