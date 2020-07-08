@@ -344,6 +344,9 @@ tck_merged$CountFlag[tck_merged$nymphCount==tck_merged$totalNymph_tax &
                        tck_merged$adultCount == tck_merged$totalAdult_tax &
                        tck_merged$larvaCount == tck_merged$totalLarva_tax] <- 0
 
+# no flag: no ticks
+tck_merged$CountFlag[tck_merged$targetTaxaPresent=="N"] <- 0
+
 # flag 2: the field total is > than tax total
 tck_merged$CountFlag[tck_merged$totalCount_field > tck_merged$totalCount_tax] <- 2
 
@@ -379,29 +382,22 @@ table(tck_merged$CountFlag)
 ### some of these have notes in the ID flag column indicating a non-tick
 # trust the lab count and don't correct the counts
 # remove flag (2->0)
-tck_merged %>% mutate(CountFlag = ifelse(CountFlag == 2 & IDflag == "ID WRONG", 0, CountFlag)) -> tck_merged
+tck_merged %>% mutate(CountFlag = case_when(CountFlag == 2 & IDflag == "ID WRONG" ~ 0,
+                                            TRUE ~ CountFlag)) -> tck_merged
 
 ### some have more larvae in the field than in the lab
 # larvae weren't always identified/counted in the lab, or if they were, only counted up to a limit
 # if there were more larvae in the field than in lab, the extra larvae should be added to the order level (IXOSP2)
 # "extra larvae" = larvae not counted - those moved to another lifestage
 
-tck_merged %>% mutate(
-  IXOSP2_Larva = ifelse(
-    CountFlag == 2 & larvaCount>totalLarva_tax & is.na(IDflag), # if the larval numbers are off but no ID flag
-    # New IXOSP Larvae is the old count + discrepancy - those assigned to other lifestages
-    IXOSP2_Larva + (larvaCount - totalLarva_tax) + (nymphCount - totalNymph_tax) + (larvaCount - totalLarva_tax), #
-    IXOSP2_Larva)
-) -> tck_merged
+tck_merged %>% mutate(IXOSP2_Larva = case_when(
+    CountFlag == 2 & larvaCount>totalLarva_tax & is.na(IDflag) ~ IXOSP2_Larva + (larvaCount - totalLarva_tax) + (nymphCount - totalNymph_tax) + (larvaCount - totalLarva_tax), 
+    TRUE ~ IXOSP2_Larva)) -> tck_merged
 
 # remove flag
-tck_merged %>% mutate(
-  CountFlag = ifelse(
-    CountFlag == 2 & larvaCount>totalLarva_tax & is.na(IDflag), # if only the larval numbers are off
-    0, # new IXOSP Larva count is now the old count + (discrepancy between field and lab totals)
-    CountFlag
-  )
-) -> tck_merged
+tck_merged %>% mutate(CountFlag = case_when(
+  CountFlag == 2 & larvaCount>totalLarva_tax & is.na(IDflag)~0, 
+  TRUE ~ CountFlag)) -> tck_merged
 
 
 ### some counts are off by only a few individuals (negligible)
@@ -409,13 +405,9 @@ tck_merged %>% mutate(
 # if counts are off by < 10% this difference is not too meaningful
 # trust the lab count data, don't change any counts
 # remove flag
-tck_merged %>% mutate(
-  CountFlag = ifelse(
-    CountFlag == 2 & (totalCount_field - totalCount_tax)/totalCount_field < 0.1, # if discrepancy < 10% of total
-    0, # remove flag (use raw lab counts)
-    CountFlag
-  )
-) -> tck_merged
+tck_merged %>% mutate(CountFlag = case_when(
+    CountFlag == 2 & (totalCount_field - totalCount_tax)/totalCount_field < 0.1 ~0, # if discrepancy < 10% of total
+    TRUE ~ CountFlag)) -> tck_merged
 
 ### some counts are off by more than 10% but explanation is obvious
 # cases where 1-2 field ticks are "missing" but discrepancy is more than 10% of total count
@@ -435,74 +427,51 @@ if(sum(colnames(tck_merged) == "IXOSP2_Larva")==0){
 }
 
 # if there are missing adults and remarks in the field, add the missing adults to IXOSP2_Adult
-tck_merged %>% mutate(
-  IXOSP2_Adult = ifelse(
-    CountFlag == 2 & adultCount>totalAdult_tax & (adultCount-totalAdult_tax) <= 2 & !is.na(remarks_field), 
-    IXOSP2_Adult+ (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # count discrepancy add to order IXOSP2
-    IXOSP2_Adult
-  )) %>%
+tck_merged %>% mutate(IXOSP2_Adult = case_when(
+    CountFlag == 2 & adultCount>totalAdult_tax & (adultCount-totalAdult_tax) <= 2 & !is.na(remarks_field) ~  
+      IXOSP2_Adult+ (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # count discrepancy add to order IXOSP2
+    TRUE ~ IXOSP2_Adult)) %>%
 # if there are missing nymphs and remarks in the field, add the missing adults to IXOSP2_Nymph
-  mutate(
-    IXOSP2_Nymph = ifelse(
-      CountFlag == 2 & nymphCount>totalNymph_tax & (nymphCount-totalNymph_tax) <= 2 & !is.na(remarks_field), 
-      IXOSP2_Nymph+ (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # count discrepancy add to order IXOSP2
-      IXOSP2_Nymph
-    )
-  ) %>%
+  mutate(IXOSP2_Nymph = case_when(
+      CountFlag == 2 & nymphCount>totalNymph_tax & (nymphCount-totalNymph_tax) <= 2 & !is.na(remarks_field) ~
+        IXOSP2_Nymph+ (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # count discrepancy add to order IXOSP2
+     TRUE ~ IXOSP2_Nymph)) %>%
 # if there are missing larvae and remarks in the field, add the missing adults to IXOSP2_Larva
-  mutate(
-    IXOSP2_Larva = ifelse(
-      CountFlag == 2 & larvaCount>totalLarva_tax & (larvaCount-totalLarva_tax) <= 2 & !is.na(remarks_field), 
-      IXOSP2_Larva+ (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), 
-      IXOSP2_Larva 
-  )) -> tck_merged
+  mutate(IXOSP2_Larva = case_when(
+      CountFlag == 2 & larvaCount>totalLarva_tax & (larvaCount-totalLarva_tax) <= 2 & !is.na(remarks_field) ~
+        IXOSP2_Larva+ (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), 
+      TRUE ~ IXOSP2_Larva)) -> tck_merged
 
 
 # remove flag
-tck_merged %>% mutate(
-  CountFlag = ifelse(
-    CountFlag == 2 & adultCount>totalAdult_tax & (adultCount-totalAdult_tax) <= 2 & !is.na(remarks_field), 0, CountFlag)) %>%
-  mutate(
-    CountFlag = ifelse(
-      CountFlag == 2 & nymphCount>totalNymph_tax & (nymphCount-totalNymph_tax) <=2 & !is.na(remarks_field), 0, CountFlag)) %>%
-  mutate(
-    CountFlag = ifelse(
-      CountFlag == 2 & larvaCount>totalLarva_tax & (larvaCount-totalLarva_tax) <=2 & !is.na(remarks_field), 0, CountFlag)) -> tck_merged
+tck_merged %>% mutate(CountFlag = case_when(
+    CountFlag == 2 & adultCount>totalAdult_tax & (adultCount-totalAdult_tax) <= 2 & !is.na(remarks_field)~0,
+    CountFlag == 2 & nymphCount>totalNymph_tax & (nymphCount-totalNymph_tax) <=2 & !is.na(remarks_field)~0, 
+    CountFlag == 2 & larvaCount>totalLarva_tax & (larvaCount-totalLarva_tax) <=2 & !is.na(remarks_field)~0, 
+    TRUE~ CountFlag)) -> tck_merged
 
 
 ### some counts are off because over invoice limit 
 # in this case trust the field counts, and extra are assigned to order level
-tck_merged %>% mutate(
-    IXOSP2_Nymph = ifelse(
-      CountFlag == 2 & nymphCount>totalNymph_tax & IDflag == "INVOICE LIMIT", 
-      IXOSP2_Nymph+ (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # add count discrepancy to order
-      IXOSP2_Nymph
-    )
-  ) %>%
-  mutate(
-    IXOSP2_Larva = ifelse(
-      CountFlag == 2 & larvaCount>totalLarva_tax & IDflag == "INVOICE LIMIT", 
+tck_merged %>% mutate(IXOSP2_Nymph = case_when(
+  CountFlag == 2 & nymphCount>totalNymph_tax & IDflag == "INVOICE LIMIT" ~
+    IXOSP2_Nymph+ (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # add count discrepancy to order
+      TRUE ~ IXOSP2_Nymph)) %>%
+  mutate(IXOSP2_Larva = case_when(
+    CountFlag == 2 & larvaCount>totalLarva_tax & IDflag == "INVOICE LIMIT" ~
       IXOSP2_Larva+ (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # add count discrepancy to order
-      IXOSP2_Larva
-    )) %>%
-  mutate(
-    IXOSP2_Adult = ifelse(
-    CountFlag == 2 & adultCount>totalAdult_tax & IDflag == "INVOICE LIMIT", 
-    IXOSP2_Adult+ (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # add count discrepancy to order
-    IXOSP2_Adult
-  )
-    )-> tck_merged
+    TRUE ~ IXOSP2_Larva)) %>%
+  mutate(IXOSP2_Adult = case_when(
+    CountFlag == 2 & adultCount>totalAdult_tax & IDflag == "INVOICE LIMIT" ~
+      IXOSP2_Adult+ (adultCount - totalAdult_tax) + (nymphCount-totalNymph_tax) + (larvaCount-totalLarva_tax), # add count discrepancy to order
+    TRUE ~ IXOSP2_Adult))-> tck_merged
 
 # remove flag
-tck_merged %>% mutate(
-  CountFlag = ifelse(
-    CountFlag == 2 & adultCount>totalAdult_tax &IDflag == "INVOICE LIMIT" , 0, CountFlag)) %>%
-  mutate(
-    CountFlag = ifelse(
-      CountFlag == 2 & nymphCount>totalNymph_tax &IDflag == "INVOICE LIMIT" , 0, CountFlag)) %>%
-  mutate(
-    CountFlag = ifelse(
-      CountFlag == 2 & larvaCount>totalLarva_tax &IDflag == "INVOICE LIMIT" , 0, CountFlag)) -> tck_merged
+tck_merged %>% mutate(CountFlag = case_when(
+    CountFlag == 2 & adultCount>totalAdult_tax &IDflag == "INVOICE LIMIT" ~ 0,
+    CountFlag == 2 & nymphCount>totalNymph_tax &IDflag == "INVOICE LIMIT" ~ 0, 
+    CountFlag == 2 & larvaCount>totalLarva_tax &IDflag == "INVOICE LIMIT" ~ 0, 
+    TRUE ~ CountFlag)) -> tck_merged
 
 table(tck_merged$CountFlag) 
 
@@ -514,15 +483,11 @@ table(tck_merged$CountFlag)
 # trust the lab count here and don't correct counts
 
 # remove flag
-tck_merged %>% mutate(
-  CountFlag = ifelse(
-    CountFlag == 3 & (abs(totalCount_tax-totalCount_field)/totalCount_tax < 0.3| (totalCount_tax - totalCount_field)<=5),
-  0, CountFlag
-  )
-) -> tck_merged
+tck_merged %>% mutate(CountFlag = case_when(
+  CountFlag == 3 & (abs(totalCount_tax-totalCount_field))/totalCount_tax < 0.3 ~ 0,
+  (totalCount_tax - totalCount_field)<=5 ~ 0,
+  TRUE ~ CountFlag)) -> tck_merged
   
-table(tck_merged$CountFlag) # still a few issues
-
 #### FIX COUNT 2.4 REMOVE THE UNSOLVED MYSTERY SAMPLES
 # cases with larger discrepancies that aren't obvious are removed from final dataset
 # make sure this is less than 1% of total cases
