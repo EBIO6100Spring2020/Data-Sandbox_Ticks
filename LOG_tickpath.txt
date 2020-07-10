@@ -1,0 +1,173 @@
+[1] "## Original number of rows: "
+[1] 119836
+[1] "## Original number of rows (NA test results removed): "
+[1] 77040
+[1] "## Samples that did not pass quality checks: "
+[1] uid     batchID
+<0 rows> (or 0-length row.names)
+[1] "## Batches NOT found in quality file: "
+[1] "NEON_20180504" "NEON_20191210" "NEON_20170831"
+[1] "## uids are unique?: TRUE"
+[1] "## Which variables are missing data?: "
+        domainID           siteID           plotID  decimalLatitude decimalLongitude         plotType 
+           FALSE            FALSE            FALSE            FALSE            FALSE            FALSE 
+       nlcdClass        elevation      collectDate      subsampleID          batchID        testingID 
+           FALSE            FALSE            FALSE            FALSE            FALSE            FALSE 
+testPathogenName 
+            TRUE 
+                                    uid         namedLocation       collectDate   sampleCondition
+10 e173c1e7-938f-4412-82c6-38c931fa28e3 HARV_001.tickPlot.tck 2014-07-14T17:53Z Sample incomplete
+             remarks
+10 Sample incomplete
+[1] "## Sample conditions: "
+
+   Handling error                OK Sample incomplete 
+                2            119833                 1 
+                                    uid         namedLocation       collectDate   sampleCondition
+1  963b40c8-2e2f-4a4d-b665-e2a7c3745c08 HARV_001.tickPlot.tck 2014-06-02T16:10Z    Handling error
+3  f6825133-768d-4b37-82f8-ea3ac19891bb HARV_001.tickPlot.tck 2014-06-02T16:10Z    Handling error
+10 e173c1e7-938f-4412-82c6-38c931fa28e3 HARV_001.tickPlot.tck 2014-07-14T17:53Z Sample incomplete
+                                              remarks
+1  Possibly mixed with HARV_001.20140602.IXOSCA.N.006
+3  Possibly mixed with HARV_001.20140602.IXOSCA.N.005
+10                                  Sample incomplete
+[1] "## Number of test results that are NA: "
+[1] 42796
+[1] "## HardTick DNA Quality: "
+          testPathogenName
+testResult HardTick DNA Quality
+  Positive                 8559
+[1] uid             namedLocation   collectDate     sampleCondition remarks        
+<0 rows> (or 0-length row.names)
+[1] "## Site x year for all tested ticks: "
+      year
+siteID 2014 2015 2016 2017 2018
+  BLAN    0    0   40   81   30
+  DELA    0    2    0    0    7
+  HARV    9   42    0   74   53
+  KONA    0    0    0   14    0
+  KONZ    0    7  122   28   96
+  LENO    0    0   29    0   34
+  MLBS    0    0    0    0    1
+  ORNL  241    0  306  407 1225
+  OSBS  209   80  574  320  304
+  SCBI  195    0   70  114  153
+  SERC    0    0  121  324  473
+  TALL  240  187  216  421  136
+  TREE    0    0  117  112  121
+  UKFS    0  257  328  361  287
+[1] "## Site x year for Ambame only: "
+      year
+siteID 2014 2015 2016 2017 2018
+  BLAN    0    0    3    2   15
+  DELA    0    2    0    0    7
+  KONA    0    0    0   14    0
+  KONZ    0    7  122   28   96
+  LENO    0    0   28    0   34
+  ORNL  237    0  283  404 1210
+  OSBS  209   80  574  320  304
+  SCBI   37    0   11   80   91
+  SERC    0    0   61  242  343
+  TALL  240  187  216  421  136
+  UKFS    0  257  328  361  287
+[1] "## Site x year for Ixosca only: "
+      year
+siteID 2014 2015 2016 2017 2018
+  BLAN    0    0   37   79   15
+  HARV    9   42    0   74   53
+  LENO    0    0    1    0    0
+  MLBS    0    0    0    0    1
+  ORNL    4    0   23    3   15
+  SCBI  158    0   59   34   62
+  SERC    0    0   60   82  130
+  TREE    0    0  117  112  121
+[1] "## Plot x year: "
+          year
+plotID     2014 2015 2016 2017 2018
+  BLAN_005    0    0   39   78   30
+  BLAN_012    0    0    1    2    0
+  BLAN_015    0    0    0    1    0
+  DELA_005    0    0    0    0    1
+  DELA_008    0    2    0    0    6
+  HARV_001    9    0    0   35    5
+  HARV_002    0    0    0    0    9
+  HARV_004    0   25    0   18    1
+  HARV_006    0    0    0    3    1
+  HARV_020    0    8    0    5    0
+  HARV_022    0    6    0   11   32
+  HARV_026    0    3    0    2    5
+  KONA_002    0    0    0    7    0
+  KONA_003    0    0    0    6    0
+  KONA_019    0    0    0    1    0
+  KONZ_001    0    0    5    0    4
+  KONZ_002    0    0    7    0    0
+  KONZ_004    0    0    0    6    0
+  KONZ_007    0    0    0    1    0
+  KONZ_009    0    0    5    0    0
+  KONZ_025    0    7  105   21   92
+  LENO_002    0    0    2    0    3
+  LENO_003    0    0   20    0    1
+  LENO_004    0    0    0    0   13
+  LENO_015    0    0    0    0    2
+  LENO_023    0    0    4    0    2
+  LENO_042    0    0    3    0   13
+  MLBS_004    0    0    0    0    1
+  ORNL_002   88    0   64  124  714
+  ORNL_003    7    0   33   30   40
+  ORNL_007   27    0  102   42   57
+  ORNL_008   95    0   46   44  118
+  ORNL_009   13    0   36   29  283
+  ORNL_040   11    0   25  138   13
+  OSBS_001   16    0  140   13  273
+  OSBS_003   26   32  144  117    0
+  OSBS_004    2    0    4    2    1
+  OSBS_005  160   48  244  188   19
+  OSBS_022    5    0   42    0    0
+  OSBS_048    0    0    0    0   11
+  SCBI_002   48    0   21   14   36
+  SCBI_005    7    0    5    4    6
+  SCBI_006    4    0    1    0    7
+  SCBI_007   62    0    9    8   34
+  SCBI_013   69    0   34   74   66
+  SCBI_039    5    0    0   14    4
+  SERC_001    0    0   31   41   65
+  SERC_002    0    0   38  125  213
+  SERC_005    0    0   10   62   35
+  SERC_006    0    0   18   49   58
+  SERC_012    0    0   24   44   41
+  SERC_023    0    0    0    3   61
+  TALL_001   35   16   22   32   29
+  TALL_002  155   24   36  265   49
+  TALL_003   24   18   10    0    0
+  TALL_006    5    6   20    6    0
+  TALL_008   21  122  128  118   58
+  TALL_016    0    1    0    0    0
+  TREE_007    0    0   27   15   31
+  TREE_015    0    0    3    3    7
+  TREE_017    0    0   28   39   60
+  TREE_019    0    0   50   41   20
+  TREE_022    0    0    9   14    3
+  UKFS_001    0  212  176  109  106
+  UKFS_002    0    5   23   16   42
+  UKFS_003    0   21   59  160   61
+  UKFS_004    0   19   69   72   74
+  UKFS_018    0    0    0    0    3
+  UKFS_030    0    0    1    4    1
+[1] "## Which species was tested for which pathogens: "
+                                 species
+testPathogenName                  AMBAME IXOSCA
+  Anaplasma phagocytophilum         7277   1282
+  Babesia microti                     37   1245
+  Borrelia burgdorferi                 0      9
+  Borrelia burgdorferi sensu lato     37   1245
+  Borrelia lonestari                7240     37
+  Borrelia mayonii                    37   1245
+  Borrelia miyamotoi                  37   1245
+  Borrelia sp.                      7277   1282
+  Ehrlichia chaffeensis             7240     37
+  Ehrlichia ewingii                 7240     37
+  Ehrlichia muris-like                37   1245
+  Francisella tularensis            7240     37
+  HardTick DNA Quality              7277   1282
+  Ixodes pacificus                  7277   1282
+  Rickettsia rickettsii             7240     37

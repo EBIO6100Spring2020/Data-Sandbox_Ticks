@@ -12,17 +12,22 @@ library(lubridate)
 #### Load files ####
 keepLOG <- TRUE
 
-if(!file.exists("./data_raw/filesToStack10092/stackedFiles/tck_pathogen.csv")){
-  zipsByProduct(dpID="DP1.10092.001", site="all", package = "expanded", check.size = F, savepath = "./data_raw/")
-  stackByTable(filepath = "./data_raw/filesToStack10092/", savepath = "./data_raw/filesToStack10092/")
+if(!file.exists("./data/data/tick_path_filt_long.RData")){
+  # zipsByProduct(dpID="DP1.10092.001", site="all", package = "expanded", check.size = F, savepath = "./data_raw/")
+  # stackByTable(filepath = "./data_raw/filesToStack10092/", savepath = "./data_raw/filesToStack10092/")
+  tickpathdat <- loadByProduct(dpID="DP1.10092.001", site="all", package = "expanded", check.size = F)
+  
+  tick_path <- tickpathdat$tck_pathogen
+  tick_pathqa <- tickpathdat$NEON.University_of_Massachusetts_Laboratory_of_Medical_Zoology.tck_pathogenqa
 }
 
-tick_path <- read.csv("data_raw/filesToStack10092/stackedFiles/tck_pathogen.csv", na.strings = c("","NA","na","n/a","N/A"))
-tick_pathqa <- read.csv("data_raw/filesToStack10092/stackedFiles/NEON.University_of_Massachusetts_Laboratory_of_Medical_Zoology.tck_pathogenqa.csv", na.strings = c("","NA","na","n/a","N/A"))
+# tick_path <- read.csv("data_raw/filesToStack10092/stackedFiles/tck_pathogen.csv", na.strings = c("","NA","na","n/a","N/A"))
+# tick_pathqa <- read.csv("data_raw/filesToStack10092/stackedFiles/NEON.University_of_Massachusetts_Laboratory_of_Medical_Zoology.tck_pathogenqa.csv", na.strings = c("","NA","na","n/a","N/A"))
 
-# Set up sink to capture data filtering
+keepLOG=FALSE # Change if you want to record log of tick filtering 
+# OPTIONAL: Set up sink to capture data filtering
 if ( keepLOG ) {
-  sink(file="raw_data/LOG_tickpath.txt")
+  sink(file="data/LOG_tickpath.txt")
 }
 
 #### Raw dataset inspection ####
@@ -152,9 +157,10 @@ tick_path_samplexenv <- tick_path_filt %>%
   rename(latitude = decimalLatitude,
          longidtude = decimalLongitude) %>%  select(-c(dataQF, remarks, individualCount, testPathogenName, sampleCondition, testResult))
 
-saveRDS(tick_path_filt, "data_raw/tick_path_filt_long.RData")
-saveRDS(tick_path_samplexspecies, "data_raw/tick_path_filt_samplexspecies.RData")
-saveRDS(tick_path_samplexenv, "data_raw/tick_path_filt_samplexenv.RData")
+write.csv(tick_path_filt, "data/tick_pathogen.txt")
+# saveRDS(tick_path_filt, "data/tick_path_filt_long.RData")
+# saveRDS(tick_path_samplexspecies, "data/tick_path_filt_samplexspecies.RData") # Optional output
+# saveRDS(tick_path_samplexenv, "data/tick_path_filt_samplexenv.RData") # Optional output
 
 
 
