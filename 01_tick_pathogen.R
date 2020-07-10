@@ -15,8 +15,8 @@ keepLOG <- TRUE
 if(!file.exists("./data/tick_pathogen.csv")){
   tickpathdat <- loadByProduct(dpID="DP1.10092.001", site="all", package = "expanded", check.size = F)
   
-  # tick_path <- tickpathdat$tck_pathogen
-  # tick_pathqa <- tickpathdat$NEON.University_of_Massachusetts_Laboratory_of_Medical_Zoology.tck_pathogenqa
+  tick_path <- tickpathdat$tck_pathogen
+  tick_pathqa <- tickpathdat$NEON.University_of_Massachusetts_Laboratory_of_Medical_Zoology.tck_pathogenqa
 }
 
 
